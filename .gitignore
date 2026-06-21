@@ -1,7 +1,8 @@
 # ── Base de données locale ────────────────────────────────────────
 database/atlas.db
 
-# ── Config avec credentials (NE JAMAIS COMMITER) ─────────────────
+# ── Credentials (NE JAMAIS COMMITER) ─────────────────────────────
+.env
 scraper/config.php
 
 # ── OS / IDE ──────────────────────────────────────────────────────
