@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas du Graphisme</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #fff;
+      overflow: hidden;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #111;
+    }
+
+    canvas { display: block; }
+
+    /* ── TITLE ── */
+    #title {
+      position: fixed;
+      top: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 0.5em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.3);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.18);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── NAV DOTS ── */
+    #nav-dots {
+      position: fixed;
+      right: 28px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 20;
+    }
+
+    .nav-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.15);
+      cursor: pointer;
+      transition: background 0.3s, transform 0.3s;
+    }
+
+    .nav-dot:hover { background: rgba(0,0,0,0.5); }
+    .nav-dot.active { background: #111; transform: scale(1.8); }
+
+    /* ── PANEL ── */
+    #panel {
+      position: fixed;
+      top: 0;
+      right: -480px;
+      width: 400px;
+      height: 100vh;
+      background: rgba(255,255,255,0.97);
+      border-left: 1px solid rgba(0,0,0,0.08);
+      padding: 64px 40px 60px;
+      transition: right 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 30;
+      overflow-y: auto;
+      pointer-events: none;
+    }
+
+    #panel.open {
+      right: 0;
+      pointer-events: all;
+    }
+
+    #panel-close {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      background: none;
+      border: none;
+      color: rgba(0,0,0,0.25);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 6px 10px;
+      letter-spacing: 0.05em;
+    }
+
+    #panel-close:hover { color: #111; }
+
+    #panel-periode {
+      font-size: 9px;
+      letter-spacing: 0.45em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.35);
+      margin-bottom: 14px;
+    }
+
+    #panel-nom {
+      font-size: 30px;
+      font-weight: 300;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      letter-spacing: -0.01em;
+      color: #111;
+    }
+
+    #panel-bar {
+      width: 28px;
+      height: 2px;
+      margin-bottom: 28px;
+    }
+
+    #panel-description {
+      font-size: 13px;
+      line-height: 1.75;
+      color: rgba(0,0,0,0.6);
+      margin-bottom: 32px;
+    }
+
+    .section-label {
+      font-size: 8px;
+      letter-spacing: 0.45em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.25);
+      margin-bottom: 12px;
+      margin-top: 28px;
+    }
+
+    #panel-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag {
+      font-size: 10px;
+      padding: 3px 10px;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+      color: #333;
+    }
+
+    #panel-artistes {
+      font-size: 12px;
+      line-height: 2;
+      color: rgba(0,0,0,0.55);
+    }
+
+    #panel-principes {
+      font-size: 12px;
+      line-height: 1.8;
+      color: rgba(0,0,0,0.4);
+      font-style: italic;
+    }
+
+    /* ── LABELS 3D ── */
+    #labels {
+      position: fixed;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .label3d {
+      position: absolute;
+      font-size: 8px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      transform: translateX(-50%);
+      color: rgba(0,0,0,0.45);
+      transition: opacity 0.4s;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="title">Atlas du Graphisme</div>
+  <div id="hint">Drag pour orbiter &nbsp;·&nbsp; Scroll pour zoomer &nbsp;·&nbsp; Clic pour explorer</div>
+  <div id="nav-dots"></div>
+  <div id="labels"></div>
+
+  <div id="panel">
+    <button id="panel-close">✕</button>
+    <div id="panel-periode"></div>
+    <div id="panel-nom"></div>
+    <div id="panel-bar"></div>
+    <div id="panel-description"></div>
+    <div class="section-label">Mots-clés</div>
+    <div id="panel-tags"></div>
+    <div class="section-label">Figures majeures</div>
+    <div id="panel-artistes"></div>
+    <div class="section-label">Principes visuels</div>
+    <div id="panel-principes"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
+  import { RenderPass }       from 'three/addons/postprocessing/RenderPass.js';
+  import { BokehPass }        from 'three/addons/postprocessing/BokehPass.js';
+  import { OutputPass }       from 'three/addons/postprocessing/OutputPass.js';
+  import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
+
+  // ─────────────────────────────────────────────────────────────────
+  // DATA — chargée depuis l'API REST
+  // Fallback hardcodé utilisé si l'API est inaccessible
+  // ─────────────────────────────────────────────────────────────────
+
+  const FALLBACK_CONTENT = {
+    'arts-crafts':    { artistes: ['William Morris','Walter Crane','Charles Voysey'],       principes: "Organic motifs, medieval inspiration, decorative typography, rejection of industry." },
+    'art-nouveau':    { artistes: ['Alphonse Mucha','Hector Guimard','Gustav Klimt'],       principes: 'Sinuous lines, floral motifs, soft colours, ornate typography.' },
+    'futurisme':      { artistes: ['Umberto Boccioni','Giacomo Balla','Filippo Marinetti'], principes: 'Dynamic diagonals, speed lines, fragmented forms, aggressive typography.' },
+    'constructivisme':{ artistes: ['El Lissitzky','Alexander Rodchenko','Varvara Stepanova'],principes: 'Red & black, geometric forms, photomontage, propaganda function.' },
+    'de-stijl':       { artistes: ['Piet Mondrian','Theo van Doesburg','Gerrit Rietveld'],  principes: 'Primary colours only, horizontal/vertical lines, reduction to essence.' },
+    'bauhaus':        { artistes: ['Herbert Bayer','László Moholy-Nagy','Paul Klee','Wassily Kandinsky'], principes: 'Grid, pure geometry, primary colours, sans-serif, form follows function.' },
+    'art-deco':       { artistes: ['A.M. Cassandre','Paul Colin','Erté'],                  principes: 'Geometric luxury, symmetry, bold contrast, streamline shapes, rich materials.' },
+    'surrealisme':    { artistes: ['Salvador Dalí','René Magritte','Max Ernst','Man Ray'],  principes: 'Dream imagery, unexpected juxtapositions, automatism, subconscious symbolism.' },
+    'style-suisse':   { artistes: ['Josef Müller-Brockmann','Armin Hofmann','Emil Ruder','Max Bill'], principes: 'Mathematical grid, Helvetica, photography, generous whitespace, clear hierarchy.' },
+    'pop-art':        { artistes: ['Andy Warhol','Roy Lichtenstein','Richard Hamilton'],    principes: 'Saturated colours, Ben-Day dots, thick outlines, everyday subjects, repetition.' },
+    'vernacular':     { artistes: ['Milton Glaser','Seymour Chwast','Push Pin Studios'],    principes: 'Eclectic historical references, illustration, humour, emotional directness.' },
+    'psychedelique':  { artistes: ['Wes Wilson','Victor Moscoso','Rick Griffin'],           principes: 'Acid colours, warped type, biomorphic shapes, extreme saturation.' },
+    'new-wave-typo':  { artistes: ['Wolfgang Weingart','April Greiman','Dan Friedman'],     principes: 'Type as texture, layering, diagonal compositions, deliberate imperfection.' },
+    'pixel-art':      { artistes: ['Shigeru Miyamoto','Paul Robertson','Mark Ferrari'],     principes: 'Pixel grid, limited palette, dithering, intentional aliasing.' },
+    'postmodernisme': { artistes: ['Wolfgang Weingart','David Carson','Paula Scher','Neville Brody'], principes: 'Layering, mixed typefaces, grid deconstruction, collage, excess, irony.' },
+    'memphis':        { artistes: ['Ettore Sottsass','Nathalie Du Pasquier','George Sowden'],principes: 'Bold patterns, clashing colours, playful geometry, anti-functionalism.' },
+    'grunge':         { artistes: ['David Carson','Barry Deck','Ed Fella'],                 principes: 'Distressed type, raw textures, photocopier aesthetic, apparent chaos.' },
+    'y2k':            { artistes: ['Designers Republic','Joshua Davis'],                    principes: 'Chrome, gradients, lens flare, translucency, techno-optimism.' },
+    'skeuomorphisme': { artistes: ['Susan Kare','Jonathan Ive (pre-iOS 7)'],               principes: 'Realistic textures, drop shadows, bevels, real-world metaphors.' },
+    'flat-design':    { artistes: ['Jonathan Ive (Apple)','Material Design — Google'],      principes: 'Flat colours, no shadows, geometric icons, bold sans-serif, generous space.' },
+    'vaporwave':      { artistes: ['Macintosh Plus','Saint Pepsi','James Ferraro'],         principes: 'Pastel neons, glitch, Roman busts, retro 3D, nostalgic digital.' },
+    'brutalisme-web': { artistes: ['Pascal Deville','Hass & Hahn'],                        principes: 'Raw HTML feel, visible structure, system fonts, uncomfortable contrast.' },
+  };
+
+  function mapApiData(apiData) {
+    const courants = apiData.map(c => {
+      const fb = FALLBACK_CONTENT[c.slug] || {};
+      const debut = c.periode?.debut;
+      const fin   = c.periode?.fin;
+      const periodeStr = debut
+        ? (fin ? `${debut} – ${fin}` : `${debut} – présent`)
+        : (fb.periode || '');
+      return {
+        id:          c.slug,
+        nom:         c.nom,
+        periode:     periodeStr,
+        couleur:     c.da?.couleur   || '#888888',
+        typographie: c.da?.typo      || '"Helvetica Neue", sans-serif',
+        description: c.description_longue || c.description_courte || fb.description || '',
+        mots_cles:   (c.mots_cles?.length ? c.mots_cles : fb.mots_cles) || [],
+        artistes:    fb.artistes  || [],
+        principes:   fb.principes || '',
+        image:       c.images?.wikipedia || c.images?.wikidata || null,
+        position:    new THREE.Vector3(c.position.x, c.position.y, c.position.z),
+      };
+    });
+
+    const edges = [];
+    apiData.forEach(c => {
+      (c.relations || []).forEach(r => {
+        edges.push({ from: c.slug, to: r.cible });
+      });
+    });
+
+    return { courants, edges };
+  }
+
+  // Chargement API avec fallback hardcodé minimal
+  let _apiData;
+  try {
+    const res = await fetch('/api/courants.php');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _apiData = await res.json();
+  } catch (err) {
+    console.warn('API inaccessible, mode dégradé :', err.message);
+    _apiData = null;
+  }
+
+  // Si API KO → on construit un jeu minimal depuis FALLBACK_CONTENT
+  // (positions réelles en dur, indispensables pour la 3D)
+  const FALLBACK_POSITIONS = {
+    'arts-crafts':   [-3, 0.5, 2],   'art-nouveau':   [3, 1, 0],
+    'bauhaus':       [0, 0, -4],      'style-suisse':  [-2, -0.5, -8],
+    'pop-art':       [4, 1, -7],      'psychedelique': [5, 2, -10],
+    'postmodernisme':[2, -1, -13],    'grunge':        [-3, -1.5, -16],
+    'flat-design':   [0, 0, -20],     'pixel-art':     [-5, 1.5, -11],
+  };
+  const FALLBACK_DA = {
+    'arts-crafts':   ['#c9a84c','"Georgia", serif'],
+    'art-nouveau':   ['#7aab6e','"Palatino Linotype", serif'],
+    'bauhaus':       ['#e63946','"Helvetica Neue", sans-serif'],
+    'style-suisse':  ['#1d6fa4','"Helvetica Neue", sans-serif'],
+    'pop-art':       ['#ffb703','"Impact", sans-serif'],
+    'psychedelique': ['#9b5de5','"Trebuchet MS", cursive'],
+    'postmodernisme':['#f72585','"Times New Roman", serif'],
+    'grunge':        ['#c49a6c','"Courier New", monospace'],
+    'flat-design':   ['#00b4d8','"Segoe UI", sans-serif'],
+    'pixel-art':     ['#06d6a0','"Courier New", monospace'],
+  };
+  const FALLBACK_EDGES = [
+    ['arts-crafts','art-nouveau'],['arts-crafts','bauhaus'],['art-nouveau','bauhaus'],
+    ['bauhaus','style-suisse'],['bauhaus','pop-art'],['bauhaus','pixel-art'],
+    ['style-suisse','postmodernisme'],['style-suisse','flat-design'],
+    ['pop-art','psychedelique'],['pop-art','postmodernisme'],
+    ['psychedelique','postmodernisme'],['postmodernisme','grunge'],
+    ['grunge','flat-design'],['postmodernisme','flat-design'],
+  ];
+
+  let courants, edges;
+  if (_apiData) {
+    ({ courants, edges } = mapApiData(_apiData));
+  } else {
+    courants = Object.entries(FALLBACK_CONTENT).map(([slug, fb]) => {
+      const [px, py, pz] = FALLBACK_POSITIONS[slug] || [0,0,0];
+      const [couleur, typo] = FALLBACK_DA[slug] || ['#888','sans-serif'];
+      return { id: slug, nom: slug, periode: fb.periode, couleur, typographie: typo,
+               description: fb.description, mots_cles: fb.mots_cles, artistes: fb.artistes,
+               principes: fb.principes, image: null, position: new THREE.Vector3(px, py, pz) };
+    });
+    edges = FALLBACK_EDGES.map(([from, to]) => ({ from, to }));
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // RENDERER
+  // ─────────────────────────────────────────────────────────────────
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMappingExposure = 1;
+  document.body.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xffffff);
+  scene.fog = new THREE.FogExp2(0xffffff, 0.015);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(4, 3, 14);
+
+  // ─────────────────────────────────────────────────────────────────
+  // ORBIT CONTROLS
+  // ─────────────────────────────────────────────────────────────────
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping    = true;
+  controls.dampingFactor    = 0.06;
+  controls.enablePan        = false;
+  controls.minDistance      = 3;
+  controls.maxDistance      = 40;
+  controls.target.set(0, 0, -6);
+  controls.update();
+
+  const lerpTarget = new THREE.Vector3(0, 0, -6);
+
+  // ─────────────────────────────────────────────────────────────────
+  // POST-PROCESSING
+  // ─────────────────────────────────────────────────────────────────
+
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+
+  const bokehPass = new BokehPass(scene, camera, {
+    focus:   12.0,
+    aperture: 0.0015,
+    maxblur:  0.008
+  });
+  composer.addPass(bokehPass);
+  composer.addPass(new OutputPass());
+
+  // ─────────────────────────────────────────────────────────────────
+  // NODES
+  // ─────────────────────────────────────────────────────────────────
+
+  const nodeMap     = {};
+  const nodeMeshes  = [];
+  const ringMeshes  = [];
+
+  const nodeGeo       = new THREE.BoxGeometry(0.175, 0.175, 0.175);
+  const COLOR_DEFAULT = new THREE.Color(0x888888);
+  const COLOR_ACTIVE  = new THREE.Color(0x111111);
+
+  let activeNodeMesh = null;
+
+  courants.forEach(c => {
+    const mat  = new THREE.MeshBasicMaterial({ color: COLOR_DEFAULT.clone() });
+    const mesh = new THREE.Mesh(nodeGeo, mat);
+    mesh.position.copy(c.position);
+    mesh.userData = c;
+    scene.add(mesh);
+    nodeMap[c.id] = mesh;
+    nodeMeshes.push(mesh);
+
+    const ringGeo = new THREE.RingGeometry(0.17, 0.21, 40);
+    const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x111111), transparent: true, opacity: 0, side: THREE.DoubleSide });
+    const ring    = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.copy(c.position);
+    scene.add(ring);
+    ringMeshes.push(ring);
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // EDGES
+  // ─────────────────────────────────────────────────────────────────
+
+  edges.forEach(e => {
+    const a = nodeMap[e.from];
+    const b = nodeMap[e.to];
+    if (!a || !b) return;
+    const mid = a.position.clone().lerp(b.position, 0.5)
+      .add(new THREE.Vector3((Math.random() - 0.5) * 1.8, (Math.random() - 0.5) * 1.2, 0));
+    const curve   = new THREE.QuadraticBezierCurve3(a.position, mid, b.position);
+    const tubeGeo = new THREE.TubeGeometry(curve, 24, 0.012, 6, false);
+    const tubeMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.5 });
+    scene.add(new THREE.Mesh(tubeGeo, tubeMat));
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // PARTICLES
+  // ─────────────────────────────────────────────────────────────────
+
+  const pCount = 8000;
+  const pPos   = new Float32Array(pCount * 3);
+  for (let i = 0; i < pCount; i++) {
+    pPos[i * 3]     = (Math.random() - 0.5) * 100;
+    pPos[i * 3 + 1] = (Math.random() - 0.5) * 70;
+    pPos[i * 3 + 2] = (Math.random() - 0.5) * 100;
+  }
+
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  const pMat = new THREE.PointsMaterial({
+    color: 0x555555,
+    size: 0.09,
+    transparent: true,
+    opacity: 0.8,
+    sizeAttenuation: true
+  });
+  scene.add(new THREE.Points(pGeo, pMat));
+
+  // ─────────────────────────────────────────────────────────────────
+  // LABELS
+  // ─────────────────────────────────────────────────────────────────
+
+  const labelContainer = document.getElementById('labels');
+  const labelEls = [];
+
+  courants.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'label3d';
+    const year = c.periode ? c.periode.split('–')[0].trim() : null;
+    el.textContent = year ? `${c.nom} · ${year}` : c.nom;
+    el.style.fontFamily = c.typographie;
+    labelContainer.appendChild(el);
+    labelEls.push({ el, c });
+  });
+
+  function updateLabels() {
+    labelEls.forEach(({ el, c }) => {
+      const pos = c.position.clone().project(camera);
+      if (pos.z > 1) { el.style.opacity = 0; return; }
+      const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+      const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+      el.style.left = x + 'px';
+      el.style.top  = (y + 20) + 'px';
+      const dist = camera.position.distanceTo(c.position);
+      el.style.opacity = Math.min(1, Math.max(0, 1 - (dist - 2.5) / 7));
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // NAV DOTS
+  // ─────────────────────────────────────────────────────────────────
+
+  const navDotsEl = document.getElementById('nav-dots');
+  courants.forEach((c, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'nav-dot';
+    dot.title = c.nom;
+    dot.addEventListener('click', () => { navigateTo(c, nodeMap[c.id]); openPanel(c); });
+    navDotsEl.appendChild(dot);
+  });
+
+  function updateNavDots() {
+    let closest = 0, minD = Infinity;
+    courants.forEach((c, i) => {
+      const d = camera.position.distanceTo(c.position);
+      if (d < minD) { minD = d; closest = i; }
+    });
+    navDotsEl.querySelectorAll('.nav-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === closest);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // PANEL
+  // ─────────────────────────────────────────────────────────────────
+
+  const panel     = document.getElementById('panel');
+  const closeBtn  = document.getElementById('panel-close');
+
+  closeBtn.addEventListener('click', closePanel);
+
+  function openPanel(c) {
+    document.getElementById('panel-periode').textContent    = c.periode;
+    document.getElementById('panel-nom').textContent        = c.nom;
+    document.getElementById('panel-nom').style.fontFamily  = c.typographie;
+    document.getElementById('panel-nom').style.color       = c.couleur;
+    document.getElementById('panel-bar').style.background  = c.couleur;
+    document.getElementById('panel-description').textContent = c.description;
+
+    const tagsEl = document.getElementById('panel-tags');
+    tagsEl.innerHTML = '';
+    c.mots_cles.forEach(tag => {
+      const t = document.createElement('div');
+      t.className = 'tag';
+      t.textContent = tag;
+      t.style.color       = c.couleur;
+      t.style.borderColor = c.couleur + '44';
+      tagsEl.appendChild(t);
+    });
+
+    document.getElementById('panel-artistes').innerHTML =
+      c.artistes.map(a => `<div>${a}</div>`).join('');
+    document.getElementById('panel-principes').textContent = c.principes;
+
+    panel.style.borderLeftColor = 'rgba(0,0,0,0.08)';
+    panel.classList.add('open');
+  }
+
+  function closePanel() {
+    panel.classList.remove('open');
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // NAVIGATION
+  // ─────────────────────────────────────────────────────────────────
+
+  // Smooth orbit target + camera zoom
+  const lerpCameraPos = new THREE.Vector3(4, 3, 14);
+  let isZooming = false;
+
+  function navigateTo(c, mesh) {
+    lerpTarget.copy(c.position);
+
+    // Désactiver le noeud précédent
+    if (activeNodeMesh && activeNodeMesh !== mesh) {
+      activeNodeMesh.material.color.set(COLOR_DEFAULT);
+      const prevRing = ringMeshes[nodeMeshes.indexOf(activeNodeMesh)];
+      if (prevRing) prevRing.material.opacity = 0;
+    }
+
+    // Activer le nouveau
+    activeNodeMesh = mesh;
+    mesh.material.color.set(COLOR_ACTIVE);
+    const ring = ringMeshes[nodeMeshes.indexOf(mesh)];
+    if (ring) {
+      ring.material.color.set(COLOR_ACTIVE);
+      ring.material.opacity = 0.2;
+    }
+
+    // Calculer la position caméra : 5 units vers le noeud depuis la cam actuelle
+    const dir = camera.position.clone().sub(c.position).normalize();
+    if (dir.length() < 0.001) dir.set(0, 0.3, 1).normalize();
+    lerpCameraPos.copy(c.position).addScaledVector(dir, 5);
+    isZooming = true;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // RAYCASTER
+  // ─────────────────────────────────────────────────────────────────
+
+  const raycaster = new THREE.Raycaster();
+  const mouse     = new THREE.Vector2();
+
+  window.addEventListener('click', e => {
+    if (panel.classList.contains('open') && e.clientX > window.innerWidth - 400) return;
+
+    mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    const hits = raycaster.intersectObjects(nodeMeshes);
+    if (hits.length > 0) {
+      const mesh = hits[0].object;
+      const c = mesh.userData;
+      if (c && c.nom) { openPanel(c); navigateTo(c, mesh); }
+    } else {
+      closePanel();
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // ANIMATE
+  // ─────────────────────────────────────────────────────────────────
+
+  const clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+    // Mise à jour focus Bokeh selon distance au nœud actif
+    if (activeNodeMesh) {
+      const dist = camera.position.distanceTo(activeNodeMesh.position);
+      bokehPass.uniforms['focus'].value += (dist - bokehPass.uniforms['focus'].value) * 0.05;
+    }
+    // Zoom vers le noeud actif (une seule fois, puis OrbitControls reprend)
+    if (isZooming) {
+      camera.position.lerp(lerpCameraPos, 0.06);
+      if (camera.position.distanceTo(lerpCameraPos) < 0.15) isZooming = false;
+    }
+
+    // Smooth orbit target
+    controls.target.lerp(lerpTarget, 0.05);
+    controls.update();
+
+    // Face rings toward camera
+    ringMeshes.forEach(r => r.lookAt(camera.position));
+
+    // Pulse uniquement sur le noeud actif
+    nodeMeshes.forEach((m, i) => {
+      if (m === activeNodeMesh) {
+        const s = 1 + 0.1 * Math.sin(t * 2 + i * 0.9);
+        m.scale.setScalar(s);
+      } else {
+        m.scale.setScalar(1);
+      }
+    });
+
+    updateLabels();
+    updateNavDots();
+    composer.render();
+  }
+
+  animate();
+
+  // ─────────────────────────────────────────────────────────────────
+  // RESIZE
+  // ─────────────────────────────────────────────────────────────────
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  </script>
+</body>
+</html>

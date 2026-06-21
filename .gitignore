@@ -1,0 +1,11 @@
+# ── Base de données locale ────────────────────────────────────────
+database/atlas.db
+
+# ── Config avec credentials (NE JAMAIS COMMITER) ─────────────────
+scraper/config.php
+
+# ── OS / IDE ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
