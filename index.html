@@ -158,7 +158,7 @@
   const CAM_TRANS_DUR  = 3.2;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.toneMappingExposure = 1;
@@ -207,7 +207,7 @@
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bokehPass = new BokehPass(scene, camera, { focus: 50.0, aperture: 0.0003, maxblur: 0.008 });
+  const bokehPass = new BokehPass(scene, camera, { focus: 50.0, aperture: 0.0003, maxblur: 0.004 });
   composer.addPass(bokehPass);
   composer.addPass(new OutputPass());
 
@@ -329,7 +329,7 @@
     edgeMeshes.push(edgeMesh);
   });
   {
-    const pCount = 8000;
+    const pCount = 4000;
     const pPos = new Float32Array(pCount * 3);
     for (let i = 0; i < pCount; i++) {
       pPos[i*3]=(Math.random()-0.5)*100; pPos[i*3+1]=(Math.random()-0.5)*70; pPos[i*3+2]=(Math.random()-0.5)*100;
