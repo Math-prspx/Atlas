@@ -1,0 +1,9 @@
+
+https://github.com/Math-prspx/Atlas.git
+
+	nothumanatlas	
+	nothumanatlas.mysql.db
+	GraphAtlas1234
+
+
+Mot de passe Admin : AtlasAdmin2024

@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas du Graphisme</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="ls">
+    <div id="ls-pct">0</div>
+    <div id="ls-label">%&nbsp;&nbsp;&nbsp;Chargement des styles</div>
+    <div id="ls-nom"></div>
+  </div>
+
+  <button id="btn-mute" title="Son ambiant">♫</button>
+  <button id="btn-theme" title="Thème">&#9680;</button>
+  <div id="cursor"></div>
+  <div id="bg-typo"><span></span></div>
+  <div id="title">Atlas du Graphisme</div>
+  <div id="hint">Drag pour orbiter &nbsp;·&nbsp; Scroll pour zoomer &nbsp;·&nbsp; Clic pour explorer</div>
+  <div id="nav-dots"></div>
+  <div id="labels"></div>
+  <div id="timeline">
+    <div id="timeline-years"></div>
+    <div id="timeline-line"></div>
+    <div id="timeline-dots"></div>
+    <div id="timeline-marker"><span id="timeline-marker-year"></span><span id="timeline-marker-nom"></span></div>
+  </div>
+
+  <div id="lightbox">
+    <button id="lb-close">&times;</button>
+    <button id="lb-prev">&#8249;</button>
+    <img id="lb-img" src="" alt="">
+    <button id="lb-next">&#8250;</button>
+    <div id="lb-counter"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
+  import { RenderPass }       from 'three/addons/postprocessing/RenderPass.js';
+  import { BokehPass }        from 'three/addons/postprocessing/BokehPass.js';
+  import { OutputPass }       from 'three/addons/postprocessing/OutputPass.js';
+  import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
+  import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+
+  // ─────────────────────────────────────────────────────────────────
+  // DATA — chargée depuis l'API REST
+  // Fallback hardcodé utilisé si l'API est inaccessible
+  // ─────────────────────────────────────────────────────────────────
+
+  const FALLBACK_CONTENT = {
+    'arts-crafts':    { artistes: ['William Morris','Walter Crane','Charles Voysey'],       principes: "Organic motifs, medieval inspiration, decorative typography, rejection of industry." },
+    'art-nouveau':    { artistes: ['Alphonse Mucha','Hector Guimard','Gustav Klimt'],       principes: 'Sinuous lines, floral motifs, soft colours, ornate typography.' },
+    'futurisme':      { artistes: ['Umberto Boccioni','Giacomo Balla','Filippo Marinetti'], principes: 'Dynamic diagonals, speed lines, fragmented forms, aggressive typography.' },
+    'constructivisme':{ artistes: ['El Lissitzky','Alexander Rodchenko','Varvara Stepanova'],principes: 'Red & black, geometric forms, photomontage, propaganda function.' },
+    'de-stijl':       { artistes: ['Piet Mondrian','Theo van Doesburg','Gerrit Rietveld'],  principes: 'Primary colours only, horizontal/vertical lines, reduction to essence.' },
+    'bauhaus':        { artistes: ['Herbert Bayer','László Moholy-Nagy','Paul Klee','Wassily Kandinsky'], principes: 'Grid, pure geometry, primary colours, sans-serif, form follows function.' },
+    'art-deco':       { artistes: ['A.M. Cassandre','Paul Colin','Erté'],                  principes: 'Geometric luxury, symmetry, bold contrast, streamline shapes, rich materials.' },
+    'surrealisme':    { artistes: ['Salvador Dalí','René Magritte','Max Ernst','Man Ray'],  principes: 'Dream imagery, unexpected juxtapositions, automatism, subconscious symbolism.' },
+    'style-suisse':   { artistes: ['Josef Müller-Brockmann','Armin Hofmann','Emil Ruder','Max Bill'], principes: 'Mathematical grid, Helvetica, photography, generous whitespace, clear hierarchy.' },
+    'pop-art':        { artistes: ['Andy Warhol','Roy Lichtenstein','Richard Hamilton'],    principes: 'Saturated colours, Ben-Day dots, thick outlines, everyday subjects, repetition.' },
+    'vernacular':     { artistes: ['Milton Glaser','Seymour Chwast','Push Pin Studios'],    principes: 'Eclectic historical references, illustration, humour, emotional directness.' },
+    'psychedelique':  { artistes: ['Wes Wilson','Victor Moscoso','Rick Griffin'],           principes: 'Acid colours, warped type, biomorphic shapes, extreme saturation.' },
+    'new-wave-typo':  { artistes: ['Wolfgang Weingart','April Greiman','Dan Friedman'],     principes: 'Type as texture, layering, diagonal compositions, deliberate imperfection.' },
+    'pixel-art':      { artistes: ['Shigeru Miyamoto','Paul Robertson','Mark Ferrari'],     principes: 'Pixel grid, limited palette, dithering, intentional aliasing.' },
+    'postmodernisme': { artistes: ['Wolfgang Weingart','David Carson','Paula Scher','Neville Brody'], principes: 'Layering, mixed typefaces, grid deconstruction, collage, excess, irony.' },
+    'memphis':        { artistes: ['Ettore Sottsass','Nathalie Du Pasquier','George Sowden'],principes: 'Bold patterns, clashing colours, playful geometry, anti-functionalism.' },
+    'grunge':         { artistes: ['David Carson','Barry Deck','Ed Fella'],                 principes: 'Distressed type, raw textures, photocopier aesthetic, apparent chaos.' },
+    'y2k':            { artistes: ['Designers Republic','Joshua Davis'],                    principes: 'Chrome, gradients, lens flare, translucency, techno-optimism.' },
+    'skeuomorphisme': { artistes: ['Susan Kare','Jonathan Ive (pre-iOS 7)'],               principes: 'Realistic textures, drop shadows, bevels, real-world metaphors.' },
+    'flat-design':    { artistes: ['Jonathan Ive (Apple)','Material Design — Google'],      principes: 'Flat colours, no shadows, geometric icons, bold sans-serif, generous space.' },
+    'vaporwave':      { artistes: ['Macintosh Plus','Saint Pepsi','James Ferraro'],         principes: 'Pastel neons, glitch, Roman busts, retro 3D, nostalgic digital.' },
+    'brutalisme-web': { artistes: ['Pascal Deville','Hass & Hahn'],                        principes: 'Raw HTML feel, visible structure, system fonts, uncomfortable contrast.' },
+  };
+
+  // mapApiData : ajouter niveau
+  function mapApiData(apiData) {
+    const courants = apiData.map(c => {
+      const fb = FALLBACK_CONTENT[c.slug] || {};
+      const debut = c.periode?.debut;
+      const fin   = c.periode?.fin;
+      const periodeStr = debut
+        ? (fin ? `${debut} – ${fin}` : `${debut} – présent`)
+        : (fb.periode || '');
+      return {
+        id:          c.slug,
+        nom:         c.nom,
+        periode:     periodeStr,
+        couleur:     c.da?.couleur   || '#888888',
+        typographie: c.da?.typo      || '"Helvetica Neue", sans-serif',
+        description: c.description_longue || c.description_courte || fb.description || '',
+        mots_cles:   (c.mots_cles?.length ? c.mots_cles : fb.mots_cles) || [],
+        artistes:    c.artistes   || [],
+        principes:   c.key_points || '',
+        images:      c.images || [],
+        image:       (c.images || [])[0] || null,
+        position:    new THREE.Vector3(c.position.x * 1.8, c.position.y * 1.8, c.position.z * 1.58),
+        niveau:      c.niveau || 1,
+      };
+    });
+
+    const edges = [];
+    apiData.forEach(c => {
+      (c.relations || []).forEach(r => {
+        edges.push({ from: c.slug, to: r.cible });
+      });
+    });
+
+    return { courants, edges };
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // LOADING SCREEN
+  // ─────────────────────────────────────────────────────────────────
+
+  const lsEl    = document.getElementById('ls');
+  const lsPctEl = document.getElementById('ls-pct');
+  const lsNomEl = document.getElementById('ls-nom');
+  let   lsProgress = 0;
+
+  // Appliquer le thème mémorisé au loading screen immédiatement
+  if (localStorage.getItem('atlas-theme') === 'dark') lsEl.classList.add('dark');
+
+  function setProgress(pct, nom) {
+    lsProgress = Math.min(100, Math.round(pct));
+    lsPctEl.textContent = lsProgress;
+    if (nom !== undefined) {
+      lsNomEl.style.opacity = '0';
+      setTimeout(() => { lsNomEl.textContent = nom; lsNomEl.style.opacity = '1'; }, 250);
+    }
+  }
+
+  function hideLoadingScreen(onDone) {
+    setProgress(100);
+    setTimeout(() => {
+      lsEl.classList.add('hidden');
+      setTimeout(() => { lsEl.style.display = 'none'; if (onDone) onDone(); }, 900);
+    }, 300);
+  }
+
+  // Chargement API avec fallback hardcodé minimal
+  setProgress(5);
+  let _apiData;
+  try {
+    const res = await fetch('api/courants.php');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _apiData = await res.json();
+  } catch (err) {
+    console.warn('API inaccessible, mode dégradé :', err.message);
+    _apiData = null;
+  }
+  setProgress(20);
+
+  // Si API KO → on construit un jeu minimal depuis FALLBACK_CONTENT
+  // (positions réelles en dur, indispensables pour la 3D)
+  const FALLBACK_POSITIONS = {
+    'arts-crafts':   [-3, 0.5, 2],   'art-nouveau':   [3, 1, 0],
+    'bauhaus':       [0, 0, -4],      'style-suisse':  [-2, -0.5, -8],
+    'pop-art':       [4, 1, -7],      'psychedelique': [5, 2, -10],
+    'postmodernisme':[2, -1, -13],    'grunge':        [-3, -1.5, -16],
+    'flat-design':   [0, 0, -20],     'pixel-art':     [-5, 1.5, -11],
+  };
+  const FALLBACK_DA = {
+    'arts-crafts':   ['#c9a84c','"Georgia", serif'],
+    'art-nouveau':   ['#7aab6e','"Palatino Linotype", serif'],
+    'bauhaus':       ['#e63946','"Helvetica Neue", sans-serif'],
+    'style-suisse':  ['#1d6fa4','"Helvetica Neue", sans-serif'],
+    'pop-art':       ['#ffb703','"Impact", sans-serif'],
+    'psychedelique': ['#9b5de5','"Trebuchet MS", cursive'],
+    'postmodernisme':['#f72585','"Times New Roman", serif'],
+    'grunge':        ['#c49a6c','"Courier New", monospace'],
+    'flat-design':   ['#00b4d8','"Segoe UI", sans-serif'],
+    'pixel-art':     ['#06d6a0','"Courier New", monospace'],
+  };
+  const FALLBACK_EDGES = [
+    ['arts-crafts','art-nouveau'],['arts-crafts','bauhaus'],['art-nouveau','bauhaus'],
+    ['bauhaus','style-suisse'],['bauhaus','pop-art'],['bauhaus','pixel-art'],
+    ['style-suisse','postmodernisme'],['style-suisse','flat-design'],
+    ['pop-art','psychedelique'],['pop-art','postmodernisme'],
+    ['psychedelique','postmodernisme'],['postmodernisme','grunge'],
+    ['grunge','flat-design'],['postmodernisme','flat-design'],
+  ];
+
+  let courants, edges;
+  if (_apiData) {
+    ({ courants, edges } = mapApiData(_apiData));
+  } else {
+    courants = Object.entries(FALLBACK_CONTENT).map(([slug, fb]) => {
+      const [px, py, pz] = FALLBACK_POSITIONS[slug] || [0,0,0];
+      const [couleur, typo] = FALLBACK_DA[slug] || ['#888','sans-serif'];
+      return { id: slug, nom: slug, periode: fb.periode, couleur, typographie: typo,
+               description: fb.description, mots_cles: fb.mots_cles || [], artistes: fb.artistes,
+               principes: fb.principes, images: [], image: null, position: new THREE.Vector3(px, py, pz) };
+    });
+    edges = FALLBACK_EDGES.map(([from, to]) => ({ from, to }));
+  }
+
+  // Preload image_1 de chaque courant — progression 20→65%
+  const imageTargets = courants.map(c => ({ nom: c.nom, url: (c.images || [])[0] || null })).filter(t => t.url);
+  const imgTotal = imageTargets.length || 1;
+  await Promise.all(imageTargets.map((t, i) => new Promise(resolve => {
+    const img = new Image();
+    img.onload = img.onerror = () => {
+      setProgress(20 + ((i + 1) / imgTotal) * 45, t.nom.toUpperCase());
+      resolve();
+    };
+    img.src = t.url;
+  })));
+
+  // Preload fichiers audio (ArrayBuffer) — progression 65→100%
+  // Stockés dans eraAudioCache pour lecture instantanée au premier clic
+  const ERA_FILES = [
+    'sounds/1880.wav','sounds/1900.mp3','sounds/1910.mp3','sounds/1930.wav',
+    'sounds/1940.mp3','sounds/1950.mp3','sounds/1960.mp3','sounds/1970.mp3',
+    'sounds/1980.wav','sounds/1990.wav','sounds/2000.mp3','sounds/2010.wav',
+  ];
+  const eraAudioCache = {};
+  const audioTotal = ERA_FILES.length;
+  await Promise.all(ERA_FILES.map((file, i) => {
+    const label = file.replace('sounds/', '').replace(/\.\w+$/, '');
+    return fetch(file)
+      .then(r => r.arrayBuffer())
+      .then(ab => {
+        eraAudioCache[file] = ab; // ArrayBuffer — sera décodé au premier usage
+        setProgress(65 + ((i + 1) / audioTotal) * 35, label);
+      })
+      .catch(() => setProgress(65 + ((i + 1) / audioTotal) * 35, label));
+  }));
+
+  // ─────────────────────────────────────────────────────────────────
+  // RENDERER
+  // ─────────────────────────────────────────────────────────────────
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMappingExposure = 1;
+  document.body.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xffffff);
+  scene.fog = new THREE.FogExp2(0xffffff, 0.0093);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(6.75, 5.25, 24.75);
+
+  // ─────────────────────────────────────────────────────────────────
+  // ORBIT CONTROLS
+  // ─────────────────────────────────────────────────────────────────
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping    = true;
+  controls.dampingFactor    = 0.06;
+  controls.enablePan        = false;
+  controls.minDistance      = 2.25;
+  controls.maxDistance      = 67;
+  controls.autoRotate       = true;
+  controls.autoRotateSpeed  = 0.25;
+  controls.target.set(0, 0, -9.75);
+  controls.update();
+
+  const lerpTarget = new THREE.Vector3(0, 0, -9.75);
+
+  // ─────────────────────────────────────────────────────────────────
+  // CSS3D RENDERER (floating image cards)
+  // ─────────────────────────────────────────────────────────────────
+
+  const cssRenderer = new CSS3DRenderer();
+  cssRenderer.setSize(window.innerWidth, window.innerHeight);
+  Object.assign(cssRenderer.domElement.style, {
+    position: 'fixed', top: '0', left: '0', pointerEvents: 'none', zIndex: '2'
+  });
+  document.body.appendChild(cssRenderer.domElement);
+  const cssScene = new THREE.Scene();
+
+  // Positions relatives au nœud, tailles en px (CARD_SCALE = 1 unit / 110px)
+  const CARD_SCALE = 1 / 110;
+  const CARD_OFFSETS = [
+    { dx:  1.8,  dy:  0.35, dz:  0.2,  ry: -18, w: 300, h: 190, type: 'image' },
+    { dx: -2.2,  dy:  0.6,  dz: -0.3,  ry:  16, w: 185, h: 260, type: 'image' },
+    { dx:  0.5,  dy: -1.0,  dz:  0.8,  ry:  -7, w: 250, h: 155, type: 'image' },
+    { dx: -0.9,  dy:  1.3,  dz: -1.6,  ry:  12, w: 220, h: 145, type: 'image' },
+    { dx:  4.1,  dy: -0.6,  dz: -0.5,  ry: -24, w: 210, h: 290, type: 'image' },
+    { dx: -1.8,  dy: -0.9,  dz:  0.35, ry:   0, w: 338, h: 411, type: 'info', res: 3 },
+  ];
+  let floatingCards = [];
+  let cardHitPlanes = [];
+
+  // ─────────────────────────────────────────────────────────────────
+  // POST-PROCESSING
+  // ─────────────────────────────────────────────────────────────────
+
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+
+  const bokehPass = new BokehPass(scene, camera, {
+    focus:   12.0,
+    aperture: 0.0015,
+    maxblur:  0.008
+  });
+  composer.addPass(bokehPass);
+  composer.addPass(new OutputPass());
+
+  // ─────────────────────────────────────────────────────────────────
+  // NODES
+  // ─────────────────────────────────────────────────────────────────
+
+  const nodeMap     = {};
+  const nodeMeshes  = [];
+  const ringMeshes  = [];
+
+  const nodeGeoN1    = new THREE.BoxGeometry(0.175, 0.175, 0.175);
+  const nodeGeoN2    = new THREE.SphereGeometry(0.09, 12, 8);
+  const COLOR_DEFAULT = new THREE.Color(0x444444);
+  const COLOR_N2      = new THREE.Color(0x666666);
+  const COLOR_ACTIVE  = new THREE.Color(0x111111);
+
+  let activeNodeMesh = null;
+
+  courants.forEach(c => {
+    const isN2 = c.niveau === 2;
+    const geo  = isN2 ? nodeGeoN2 : nodeGeoN1;
+    const mat  = new THREE.MeshBasicMaterial({ color: isN2 ? COLOR_N2.clone() : COLOR_DEFAULT.clone(), transparent: true, opacity: 0 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(c.position);
+    mesh.scale.setScalar(0);
+    mesh.userData = c;
+    scene.add(mesh);
+    nodeMap[c.id] = mesh;
+    nodeMeshes.push(mesh);
+
+    const rInner = isN2 ? 0.10 : 0.17;
+    const rOuter = isN2 ? 0.13 : 0.21;
+    const ringGeo = new THREE.RingGeometry(rInner, rOuter, 40);
+    const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x111111), transparent: true, opacity: 0, side: THREE.DoubleSide });
+    const ring    = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.copy(c.position);
+    scene.add(ring);
+    ringMeshes.push(ring);
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // EDGES
+  // ─────────────────────────────────────────────────────────────────
+
+  const edgeMeshes = [];
+  edges.forEach(e => {
+    const a = nodeMap[e.from];
+    const b = nodeMap[e.to];
+    if (!a || !b) return;
+    const isSubEdge = a.userData.niveau === 2 || b.userData.niveau === 2;
+    const mid = a.position.clone().lerp(b.position, 0.5)
+      .add(new THREE.Vector3((Math.random() - 0.5) * 1.8, (Math.random() - 0.5) * 1.2, 0));
+    const curve   = new THREE.QuadraticBezierCurve3(a.position, mid, b.position);
+    const tubeGeo = new THREE.TubeGeometry(curve, 24, isSubEdge ? 0.006 : 0.012, 6, false);
+    const targetOpacity = isSubEdge ? 0.25 : 0.5;
+    const tubeMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0 });
+    const edgeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+    edgeMesh.userData.targetOpacity = targetOpacity;
+    scene.add(edgeMesh);
+    edgeMeshes.push(edgeMesh);
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // PARTICLES
+  // ─────────────────────────────────────────────────────────────────
+
+  const pCount = 8000;
+  const pPos   = new Float32Array(pCount * 3);
+  for (let i = 0; i < pCount; i++) {
+    pPos[i * 3]     = (Math.random() - 0.5) * 100;
+    pPos[i * 3 + 1] = (Math.random() - 0.5) * 70;
+    pPos[i * 3 + 2] = (Math.random() - 0.5) * 100;
+  }
+
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  const pMat = new THREE.PointsMaterial({
+    color: 0x555555,
+    size: 0.09,
+    transparent: true,
+    opacity: 0,
+    sizeAttenuation: true
+  });
+  scene.add(new THREE.Points(pGeo, pMat));
+
+  // ─────────────────────────────────────────────────────────────────
+  // LABELS
+  // ─────────────────────────────────────────────────────────────────
+
+  const labelContainer = document.getElementById('labels');
+  const labelEls = [];
+
+  courants.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'label3d';
+    const year = c.periode ? c.periode.split('–')[0].trim() : null;
+    el.textContent = year ? `${c.nom} · ${year}` : c.nom;
+    el.style.fontFamily = c.typographie;
+    labelContainer.appendChild(el);
+    labelEls.push({ el, c });
+  });
+
+  function updateLabels() {
+    labelEls.forEach(({ el, c }) => {
+      const pos = c.position.clone().project(camera);
+      if (pos.z > 1) { el.style.opacity = 0; return; }
+      const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+      const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+      el.style.left = x + 'px';
+      el.style.top  = (y + 20) + 'px';
+      const dist = camera.position.distanceTo(c.position);
+      const isActive = activeNodeMesh && activeNodeMesh.userData.id === c.id;
+      let opacity;
+      if (isActive) {
+        opacity = 0.85;
+      } else if (c.niveau === 2) {
+        opacity = Math.max(0, Math.min(0.55, 1 - (dist - 2) / 8));
+      } else {
+        // Niveau 1 : toujours lisible, min 0.22
+        opacity = Math.max(0.22, Math.min(0.75, 1 - (dist - 3) / 18));
+      }
+      el.style.opacity = opacity;
+      el.style.fontWeight = isActive ? '600' : '';
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // NAV DOTS
+  // ─────────────────────────────────────────────────────────────────
+
+  const navDotsEl = document.getElementById('nav-dots');
+  courants.forEach((c, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'nav-dot';
+    dot.title = c.nom;
+    dot.addEventListener('click', () => { navigateTo(c, nodeMap[c.id]); });
+    navDotsEl.appendChild(dot);
+  });
+
+  function updateNavDots() {
+    let closest = 0, minD = Infinity;
+    courants.forEach((c, i) => {
+      const d = camera.position.distanceTo(c.position);
+      if (d < minD) { minD = d; closest = i; }
+    });
+    navDotsEl.querySelectorAll('.nav-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === closest);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // MINI TIMELINE
+  // ─────────────────────────────────────────────────────────────────
+
+  const TL_MIN = 1880, TL_MAX = 2025;
+  const tlPct  = y => ((y - TL_MIN) / (TL_MAX - TL_MIN)) * 100;
+
+  const tlYearsEl  = document.getElementById('timeline-years');
+  const tlDotsEl   = document.getElementById('timeline-dots');
+  const tlMarkerEl = document.getElementById('timeline-marker');
+  const tlYearLbl  = document.getElementById('timeline-marker-year');
+  const tlNomLbl   = document.getElementById('timeline-marker-nom');
+
+  [1880, 1900, 1920, 1940, 1960, 1980, 2000, 2020].forEach(y => {
+    const el = document.createElement('span');
+    el.className = 'tl-year';
+    el.style.left = tlPct(y) + '%';
+    el.textContent = y;
+    tlYearsEl.appendChild(el);
+  });
+
+  const tlDotMap = {};
+  courants.forEach(c => {
+    const year = c.periode ? parseInt(c.periode.match(/(\d{4})/)?.[1]) : null;
+    if (!year) return;
+    const dot = document.createElement('div');
+    dot.className = 'tl-dot' + (c.niveau === 2 ? ' sub' : '');
+    dot.style.left = tlPct(year) + '%';
+    dot.title = `${c.nom} · ${year}`;
+    dot.addEventListener('click', () => navigateTo(c, nodeMap[c.id]));
+    tlDotsEl.appendChild(dot);
+    tlDotMap[c.id] = { dot, year };
+  });
+  // ─────────────────────────────────────────────────────────────────
+
+  function spawnFloatingCards(c) {
+    clearFloatingCards();
+    const pos  = c.position;
+    const imgs = c.images || [];
+    // Orientation de la carte info vers la caméra (yaw uniquement)
+    const toCam = camera.position.clone().sub(pos).normalize();
+    const camRy = Math.atan2(toCam.x, toCam.z);
+
+    CARD_OFFSETS.forEach((off, i) => {
+      const el = document.createElement('div');
+      el.className = 'float-card';
+      el.style.width  = off.w + 'px';
+
+      if (off.type === 'info') {
+        el.style.pointerEvents = 'auto';
+        const fic = document.createElement('div');
+        fic.className = 'float-info-card';
+        fic.style.borderLeftColor = c.couleur;
+        const artistesHtml = (c.artistes?.length)
+          ? `<div class="fic-label">Artistes</div><div class="fic-artistes">${c.artistes.map(a => `<div>${a}</div>`).join('')}</div>`
+          : '';
+        const principesHtml = c.principes
+          ? `<div class="fic-label">Principes</div><div class="fic-principes">${c.principes}</div>`
+          : '';
+        fic.innerHTML = `
+          <div class="fic-periode">${c.periode || ''}</div>
+          <div class="fic-nom" style="font-family:${c.typographie};color:${c.couleur}">${c.nom}</div>
+          <div class="fic-bar" style="background:${c.couleur}"></div>
+          <div class="fic-desc">${c.description || ''}</div>
+          ${artistesHtml}${principesHtml}
+        `;
+        el.appendChild(fic);
+      } else {
+        const src = imgs[i] || null;
+        // Clics gérés via hit planes THREE.js (voir cardHitPlanes) — plus fiable que CSS3D hit-testing
+        el.style.pointerEvents = 'none';
+        if (src) {
+          const img = document.createElement('img');
+          img.src = src;
+          el.appendChild(img);
+        } else {
+          el.style.height = off.h + 'px';
+          const inner = document.createElement('div');
+          inner.className = 'float-card-inner';
+          inner.style.background = `linear-gradient(135deg, ${c.couleur}22 0%, ${c.couleur}07 100%)`;
+          inner.style.border     = `1px solid ${c.couleur}30`;
+          inner.style.width      = '100%';
+          inner.style.height     = '100%';
+          const lbl = document.createElement('span');
+          lbl.style.cssText = `font-family:${c.typographie};font-size:${8+i}px;letter-spacing:0.45em;text-transform:uppercase;color:${c.couleur};opacity:0.35`;
+          lbl.textContent = c.nom;
+          inner.appendChild(lbl);
+          el.appendChild(inner);
+        }
+      }
+
+      const obj = new CSS3DObject(el);
+      obj.position.set(pos.x + off.dx, pos.y + off.dy, pos.z + off.dz);
+      obj.rotation.y    = off.type === 'info' ? camRy : camRy + off.ry * Math.PI / 180;
+      obj.scale.setScalar(CARD_SCALE / (off.res || 1));
+      obj.userData.baseY = pos.y + off.dy;
+      obj.userData.baseX = pos.x + off.dx;
+      obj.userData.phase = i * 1.5;
+      obj.userData.ampY  = off.type === 'info' ? 0.025 : 0.06 + i * 0.015;
+      cssScene.add(obj);
+      floatingCards.push(obj);
+      // Plan invisible THREE.js pour hit-testing fiable des image cards
+      if (off.type !== 'info') {
+        const planeGeo = new THREE.PlaneGeometry(off.w * CARD_SCALE, off.h * CARD_SCALE);
+        const planeMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.position.copy(obj.position);
+        plane.rotation.y = obj.rotation.y;
+        plane.userData.cardImages = imgs;
+        plane.userData.cardIndex  = i;
+        plane.userData.floatRef   = obj;
+        scene.add(plane);
+        cardHitPlanes.push(plane);
+      }
+      setTimeout(() => el.classList.add('visible'), 480 + i * 54);
+    });
+  }
+
+  function clearFloatingCards() {
+    floatingCards.forEach(obj => cssScene.remove(obj));
+    floatingCards = [];
+    cardHitPlanes.forEach(m => scene.remove(m));
+    cardHitPlanes = [];
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // NAVIGATION
+  // ─────────────────────────────────────────────────────────────────
+
+  // Smooth orbit target + camera zoom
+  const lerpCameraPos = new THREE.Vector3(4, 3, 14);
+  let isZooming = false;
+
+  const bgTypoSpan = document.querySelector('#bg-typo span');
+
+  function navigateTo(c, mesh) {
+    lerpTarget.copy(c.position);
+
+    // Typo monumentale
+    bgTypoSpan.style.fontFamily = c.typographie || 'inherit';
+    bgTypoSpan.style.color      = c.couleur || '#111';
+    bgTypoSpan.textContent      = c.nom;
+    bgTypoSpan.style.opacity    = document.documentElement.dataset.theme === 'dark' ? '0.03' : '0.07';
+
+    // Timeline
+    const tlEntry = tlDotMap[c.id];
+    if (tlEntry) {
+      Object.values(tlDotMap).forEach(e => {
+        e.dot.classList.remove('active');
+        e.dot.style.background = '';
+      });
+      tlEntry.dot.classList.add('active');
+      tlEntry.dot.style.background   = c.couleur || '#111';
+      tlMarkerEl.style.left          = tlPct(tlEntry.year) + '%';
+      tlMarkerEl.style.background    = c.couleur || 'rgba(0,0,0,0.35)';
+      tlMarkerEl.style.opacity       = '1';
+      tlYearLbl.textContent          = tlEntry.year;
+      tlYearLbl.style.color          = c.couleur || 'rgba(0,0,0,0.45)';
+      tlNomLbl.textContent           = c.nom;
+      tlNomLbl.style.color           = c.couleur || 'rgba(0,0,0,0.35)';
+    }
+
+    // Désactiver le noeud précédent
+    if (activeNodeMesh && activeNodeMesh !== mesh) {
+      activeNodeMesh.material.color.set(COLOR_DEFAULT);
+      const prevRing = ringMeshes[nodeMeshes.indexOf(activeNodeMesh)];
+      if (prevRing) prevRing.material.opacity = 0;
+    }
+
+    // Activer le nouveau
+    activeNodeMesh = mesh;
+    mesh.material.color.set(c.couleur || COLOR_ACTIVE);
+    const ring = ringMeshes[nodeMeshes.indexOf(mesh)];
+    if (ring) {
+      ring.material.color.set(c.couleur || COLOR_ACTIVE);
+      ring.material.opacity = 0.2;
+    }
+
+    // Position caméra : approche stable — évite les angles extrêmes sur les sauts lointains
+    const rawDir = camera.position.clone().sub(c.position);
+    const dist   = rawDir.length();
+    rawDir.normalize();
+    const preferred = new THREE.Vector3(0.2, 0.4, 0.9).normalize();
+    const blend     = dist > 8 ? 0.75 : 0.55;
+    const finalDir  = rawDir.clone().lerp(preferred, blend).normalize();
+    // Garantir une légère élévation — jamais sous le nœud
+    if (finalDir.y < 0.15) { finalDir.y = 0.15; finalDir.normalize(); }
+    const approachDist = 5.5;
+    lerpCameraPos.copy(c.position).addScaledVector(finalDir, approachDist);
+    isZooming = true;
+    pendingCardCourant = c; // cartes spawnées une fois la caméra arrivée
+    clearFloatingCards();   // vider immédiatement les cartes de la sélection précédente
+
+    // ERA AUDIO
+    if (audioStarted && !audioMuted) {
+      const debutYear = c.periode ? parseInt(c.periode.match(/(\d{4})/)?.[1]) : null;
+      if (debutYear) playEraAudio(getEraFile(debutYear));
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // RAYCASTER
+  // ─────────────────────────────────────────────────────────────────
+
+  const raycaster    = new THREE.Raycaster();
+  const mouse        = new THREE.Vector2();
+  const cursorEl     = document.getElementById('cursor');
+  let   cursorX = 0, cursorY = 0;
+
+  // Curseur personnalisé
+  window.addEventListener('mousemove', e => {
+    cursorX = e.clientX;
+    cursorY = e.clientY;
+    cursorEl.style.left = cursorX + 'px';
+    cursorEl.style.top  = cursorY + 'px';
+
+    mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(nodeMeshes);
+    if (hits.length > 0) {
+      const col = hits[0].object.userData.couleur || '#111';
+      cursorEl.style.width       = '16px';
+      cursorEl.style.height      = '16px';
+      cursorEl.style.background  = col;
+      cursorEl.style.borderColor = col;
+      cursorEl.style.opacity     = '0.85';
+    } else {
+      cursorEl.style.width       = '10px';
+      cursorEl.style.height      = '10px';
+      cursorEl.style.background  = 'transparent';
+      cursorEl.style.borderColor = document.documentElement.dataset.theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)';
+      cursorEl.style.opacity     = '1';
+    }
+  });
+
+  function addStopAutoRotate() {
+    renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; }, { once: true });
+  }
+  addStopAutoRotate();
+
+  let pointerMoved = false;
+  let pointerDownX = 0, pointerDownY = 0;
+  window.addEventListener('pointerdown', e => { pointerMoved = false; pointerDownX = e.clientX; pointerDownY = e.clientY; });
+  window.addEventListener('pointermove', e => {
+    if (e.buttons > 0) {
+      const dx = e.clientX - pointerDownX;
+      const dy = e.clientY - pointerDownY;
+      if (Math.sqrt(dx * dx + dy * dy) > 5) pointerMoved = true;
+    }
+  });
+
+  window.addEventListener('click', e => {
+    // Ignorer les clics sur les éléments UI (boutons, timeline, nav-dots)
+    if (e.target.closest('#btn-mute, #btn-theme, #timeline, #nav-dots, #lightbox, #ls')) return;
+    if (pointerMoved) return;
+    mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    // Hit planes des image cards — plus fiable que CSS3D hit-testing
+    const cardHits = raycaster.intersectObjects(cardHitPlanes);
+    if (cardHits.length > 0) {
+      const { cardImages, cardIndex } = cardHits[0].object.userData;
+      openLightbox(cardImages, cardIndex);
+      return;
+    }
+
+    const hits = raycaster.intersectObjects(nodeMeshes);
+    if (hits.length > 0) {
+      const mesh = hits[0].object;
+      const c = mesh.userData;
+      if (c && c.nom) { navigateTo(c, mesh); }
+    } else {
+      deselect();
+    }
+  });
+
+  function deselect() {
+    clearFloatingCards();
+    pendingCardCourant = null;
+    stopEraAudio();
+    if (activeNodeMesh) {
+      const isN2 = activeNodeMesh.userData.niveau === 2;
+      activeNodeMesh.material.color.set(isN2 ? COLOR_N2 : COLOR_DEFAULT);
+      const prevRing = ringMeshes[nodeMeshes.indexOf(activeNodeMesh)];
+      if (prevRing) prevRing.material.opacity = 0;
+      activeNodeMesh = null;
+    }
+    bgTypoSpan.style.opacity = '0';
+    tlMarkerEl.style.opacity = '0';
+    Object.values(tlDotMap).forEach(e => { e.dot.classList.remove('active'); e.dot.style.background = ''; });
+  }
+
+  function resetView() {
+    clearFloatingCards();
+    stopEraAudio();
+    if (activeNodeMesh) {
+      const isN2 = activeNodeMesh.userData.niveau === 2;
+      activeNodeMesh.material.color.set(isN2 ? COLOR_N2 : COLOR_DEFAULT);
+      const prevRing = ringMeshes[nodeMeshes.indexOf(activeNodeMesh)];
+      if (prevRing) prevRing.material.opacity = 0;
+      activeNodeMesh = null;
+    }
+    lerpTarget.set(0, 0, -9.75);
+    lerpCameraPos.set(6.75, 5.25, 24.75);
+    isZooming = true;
+    controls.autoRotate = true;
+    addStopAutoRotate();
+    bgTypoSpan.style.opacity = '0';
+    tlMarkerEl.style.opacity = '0';
+    Object.values(tlDotMap).forEach(e => { e.dot.classList.remove('active'); e.dot.style.background = ''; });
+  }
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (lightboxEl.classList.contains('active')) { closeLightbox(); return; }
+      deselect();
+    }
+    if (lightboxEl.classList.contains('active')) {
+      if (e.key === 'ArrowLeft')  { lbPrev.click(); }
+      if (e.key === 'ArrowRight') { lbNext.click(); }
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // LIGHTBOX
+  // ─────────────────────────────────────────────────────────────────
+
+  let lbImages = [];
+  let lbIndex  = 0;
+
+  const lightboxEl = document.getElementById('lightbox');
+  const lbImgEl    = document.getElementById('lb-img');
+  const lbCounter  = document.getElementById('lb-counter');
+  const lbClose    = document.getElementById('lb-close');
+  const lbPrev     = document.getElementById('lb-prev');
+  const lbNext     = document.getElementById('lb-next');
+
+  function openLightbox(images, startIndex) {
+    lbImages = (images || []).filter(Boolean);
+    if (lbImages.length === 0) return;
+    lbIndex = Math.min(startIndex, lbImages.length - 1);
+    updateLbImage();
+    lightboxEl.classList.add('active');
+  }
+
+  function closeLightbox() {
+    lightboxEl.classList.remove('active');
+  }
+
+  function updateLbImage() {
+    lbImgEl.src = lbImages[lbIndex];
+    lbCounter.textContent = lbImages.length > 1 ? `${lbIndex + 1}  /  ${lbImages.length}` : '';
+    lbPrev.style.visibility = lbImages.length > 1 ? 'visible' : 'hidden';
+    lbNext.style.visibility = lbImages.length > 1 ? 'visible' : 'hidden';
+  }
+
+  lbClose.addEventListener('click', closeLightbox);
+  lightboxEl.addEventListener('click', e => { if (e.target === lightboxEl) closeLightbox(); });
+  lbPrev.addEventListener('click', e => {
+    e.stopPropagation();
+    lbIndex = (lbIndex - 1 + lbImages.length) % lbImages.length;
+    updateLbImage();
+  });
+  lbNext.addEventListener('click', e => {
+    e.stopPropagation();
+    lbIndex = (lbIndex + 1) % lbImages.length;
+    updateLbImage();
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // DARK THEME
+  // ─────────────────────────────────────────────────────────────────
+
+  const THEME = {
+    light: { bg: 0xffffff, fog: 0xffffff, node: 0x444444, nodeN2: 0x666666, tube: 0x555555, part: 0x444444 },
+    dark:  { bg: 0x000000, fog: 0x000000, node: 0x2a2a2a, nodeN2: 0x3a3a3a, tube: 0x1a1a1a, part: 0x333333 },
+  };
+
+  function setTheme(isDark) {
+    const t = isDark ? THEME.dark : THEME.light;
+    document.documentElement.dataset.theme = isDark ? 'dark' : '';
+    scene.background.set(t.bg);
+    scene.fog.color.set(t.fog);
+    COLOR_DEFAULT.set(t.node);
+    COLOR_N2.set(t.nodeN2);
+    nodeMeshes.forEach(mesh => {
+      if (mesh !== activeNodeMesh) {
+        mesh.material.color.set(mesh.userData.niveau === 2 ? t.nodeN2 : t.node);
+      }
+    });
+    const tubeOpacityScale = isDark ? 0.45 : 1;
+    edgeMeshes.forEach(m => {
+      m.material.color.set(t.tube);
+      m.material.opacity = m.userData.targetOpacity * tubeOpacityScale;
+    });
+    pMat.color.set(t.part);
+    btnTheme.textContent = isDark ? '○' : '◐';
+    localStorage.setItem('atlas-theme', isDark ? 'dark' : 'light');
+  }
+
+  const btnTheme = document.getElementById('btn-theme');
+  btnTheme.addEventListener('click', () => {
+    setTheme(document.documentElement.dataset.theme !== 'dark');
+  });
+
+  // Init depuis localStorage
+  if (localStorage.getItem('atlas-theme') === 'dark') setTheme(true);
+
+  // ─────────────────────────────────────────────────────────────────
+  // AUDIO — contexte + mute (son par ère, pas de synthé global)
+  // ─────────────────────────────────────────────────────────────────
+
+  let audioCtx     = null;
+  let audioStarted = false;
+  let audioMuted   = false;
+  const btnMute    = document.getElementById('btn-mute');
+
+  function startAudio() {
+    if (audioStarted) return;
+    audioStarted = true;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function toggleMute() {
+    if (!audioStarted) startAudio(); // toujours démarrer si pas encore fait
+    audioMuted = !audioMuted;
+    if (eraGainNode) {
+      eraGainNode.gain.linearRampToValueAtTime(
+        audioMuted ? 0 : 0.65, audioCtx.currentTime + 0.6
+      );
+    }
+    btnMute.classList.toggle('muted', audioMuted);
+    btnMute.textContent = audioMuted ? '♪' : '♫';
+  }
+
+  btnMute.addEventListener('click', toggleMute);
+  // Démarrer l'AudioContext sur tout premier clic dans la page
+  document.addEventListener('pointerdown', () => {
+    if (!audioStarted) startAudio();
+  }, { once: true });
+
+  // ─────────────────────────────────────────────────────────────────
+  // ERA AUDIO — crossfade par tranche temporelle
+  // ─────────────────────────────────────────────────────────────────
+
+  const ERA_BUCKETS = [
+    { from: 1850, to: 1900, file: 'sounds/1880.wav'  },
+    { from: 1900, to: 1910, file: 'sounds/1900.mp3'  },
+    { from: 1910, to: 1920, file: 'sounds/1910.mp3'  },
+    { from: 1920, to: 1940, file: 'sounds/1930.wav'  }, // pas de fichier 1920
+    { from: 1940, to: 1950, file: 'sounds/1940.mp3'  },
+    { from: 1950, to: 1960, file: 'sounds/1950.mp3'  },
+    { from: 1960, to: 1970, file: 'sounds/1960.mp3'  },
+    { from: 1970, to: 1980, file: 'sounds/1970.mp3'  },
+    { from: 1980, to: 1990, file: 'sounds/1980.wav'  },
+    { from: 1990, to: 2000, file: 'sounds/1990.wav'  },
+    { from: 2000, to: 2010, file: 'sounds/2000.mp3'  },
+    { from: 2010, to: 2030, file: 'sounds/2010.wav'  },
+  ];
+
+  let eraSource      = null;
+  let eraGainNode    = null;
+  let currentEraFile = null;
+
+  function getEraFile(debutYear) {
+    const b = ERA_BUCKETS.find(e => debutYear >= e.from && debutYear < e.to);
+    return b ? b.file : null;
+  }
+
+  async function loadEraBuffer(url) {
+    if (eraAudioCache[url] instanceof AudioBuffer) return eraAudioCache[url];
+    // Si préchargé comme ArrayBuffer, décoder maintenant
+    if (eraAudioCache[url] instanceof ArrayBuffer) {
+      const decoded = await audioCtx.decodeAudioData(eraAudioCache[url].slice(0));
+      eraAudioCache[url] = decoded;
+      return decoded;
+    }
+    // Fallback : fetch à la volée
+    const res = await fetch(url);
+    const ab  = await res.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(ab);
+    eraAudioCache[url] = decoded;
+    return decoded;
+  }
+
+  function stopEraAudio(duration = 1.8) {
+    if (!eraGainNode || !audioCtx) return;
+    currentEraFile = null;
+    eraGainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+    const g = eraGainNode, s = eraSource;
+    setTimeout(() => { try { s?.stop(); } catch(e) {} }, (duration + 0.1) * 1000);
+    eraGainNode = null; eraSource = null;
+  }
+
+  async function playEraAudio(file) {
+    if (!audioCtx || audioMuted) return;
+    if (file === currentEraFile) return;
+    stopEraAudio(1.5);
+    if (!file) return;
+    currentEraFile = file;
+    try {
+      console.log('[era] loading:', file);
+      const buffer = await loadEraBuffer(file);
+      if (currentEraFile !== file) return; // changé pendant le chargement
+      console.log('[era] playing:', file, 'duration:', buffer.duration.toFixed(1) + 's');
+      eraGainNode = audioCtx.createGain();
+      eraGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      eraGainNode.gain.linearRampToValueAtTime(0.65, audioCtx.currentTime + 2);
+      eraGainNode.connect(audioCtx.destination);
+      eraSource = audioCtx.createBufferSource();
+      eraSource.buffer = buffer;
+      eraSource.loop   = true;
+      eraSource.connect(eraGainNode);
+      eraSource.start();
+    } catch(err) {
+      console.warn('[era] load failed:', err);
+      currentEraFile = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // INTRO ANIMATION
+  // ─────────────────────────────────────────────────────────────────
+
+  let introActive = false;
+  const INTRO_DURATION     = 2.8;
+  const INTRO_NODE_STAGGER = 1.6; // fenêtre totale de stagger des nœuds
+
+  let pendingCardCourant = null; // courant en attente d'affichage de cartes
+
+  // Masquer l'UI pendant l'intro
+  document.getElementById('title').style.opacity    = '0';
+  document.getElementById('hint').style.opacity     = '0';
+  document.getElementById('timeline').style.opacity = '0';
+
+  function tickIntro(elapsed) {
+    // Nœuds : apparition staggerée
+    courants.forEach((c, i) => {
+      const mesh      = nodeMap[c.id];
+      const nodeStart = 0.1 + (i / courants.length) * INTRO_NODE_STAGGER;
+      const delta     = elapsed - nodeStart;
+      if (delta <= 0) return;
+      const p = Math.min(1, delta / 0.45);
+      mesh.material.opacity = p;
+      mesh.scale.setScalar(p < 1 ? 0.4 + p * 0.6 : 1);
+    });
+
+    // Arêtes : fade in global
+    const edgeP = Math.min(1, Math.max(0, (elapsed - 0.8) / 1.2));
+    edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity * edgeP; });
+
+    // Particules
+    pMat.opacity = 0.8 * Math.min(1, Math.max(0, (elapsed - 0.6) / 1.5));
+
+    // Fin de l'intro
+    if (elapsed >= INTRO_DURATION) {
+      introActive = false;
+      courants.forEach(c => {
+        nodeMap[c.id].material.opacity = 1;
+        nodeMap[c.id].scale.setScalar(1);
+      });
+      edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity; });
+      pMat.opacity = 0.8;
+      const titleEl    = document.getElementById('title');
+      const hintEl     = document.getElementById('hint');
+      const timelineEl = document.getElementById('timeline');
+      titleEl.style.transition    = 'opacity 1s ease';
+      hintEl.style.transition     = 'opacity 1s ease 0.4s';
+      timelineEl.style.transition = 'opacity 1s ease 0.6s';
+      titleEl.style.opacity    = '1';
+      hintEl.style.opacity     = '1';
+      timelineEl.style.opacity = '1';
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // ANIMATE
+  // ─────────────────────────────────────────────────────────────────
+
+  const clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    if (introActive) tickIntro(t);
+
+    // Mise à jour focus Bokeh selon distance au nœud actif
+    if (activeNodeMesh) {
+      const dist = camera.position.distanceTo(activeNodeMesh.position);
+      bokehPass.uniforms['focus'].value += (dist - bokehPass.uniforms['focus'].value) * 0.05;
+    }
+    // Zoom vers le noeud actif — cartes spawnées à l'arrivée
+    if (isZooming) {
+      camera.position.lerp(lerpCameraPos, 0.03);
+      if (camera.position.distanceTo(lerpCameraPos) < 0.25) {
+        isZooming = false;
+        if (pendingCardCourant) {
+          spawnFloatingCards(pendingCardCourant);
+          pendingCardCourant = null;
+        }
+      }
+    }
+
+    // Smooth orbit target
+    controls.target.lerp(lerpTarget, 0.05);
+    controls.update();
+
+    // Face rings toward camera
+    ringMeshes.forEach(r => r.lookAt(camera.position));
+
+    // Pulse uniquement sur le noeud actif (hors intro)
+    if (!introActive) {
+      nodeMeshes.forEach((m, i) => {
+        if (m === activeNodeMesh) {
+          const s = 1 + 0.1 * Math.sin(t * 2 + i * 0.9);
+          m.scale.setScalar(s);
+        } else {
+          m.scale.setScalar(1);
+        }
+      });
+    }
+
+    // Float cards idle animation
+    floatingCards.forEach(obj => {
+      obj.position.y = obj.userData.baseY + Math.sin(t * 0.7 + obj.userData.phase) * obj.userData.ampY;
+      obj.position.x = obj.userData.baseX + Math.sin(t * 0.4 + obj.userData.phase + 2) * obj.userData.ampY * 0.4;
+    });
+    // Sync hit planes avec l'animation flottante
+    cardHitPlanes.forEach(plane => {
+      const ref = plane.userData.floatRef;
+      if (ref) { plane.position.x = ref.position.x; plane.position.y = ref.position.y; }
+    });
+
+    updateLabels();
+    updateNavDots();
+    composer.render();
+    cssRenderer.render(cssScene, camera);
+  }
+
+  // Démarrer la scène 3D après le loading screen
+  hideLoadingScreen(() => {
+    clock.start(); // reset le clock pour que l'intro parte de 0
+    introActive = true;
+    animate();
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // RESIZE
+  // ─────────────────────────────────────────────────────────────────
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    cssRenderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  </script>
+</body>
+</html>

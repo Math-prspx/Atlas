@@ -4,6 +4,7 @@ database/atlas.db
 # ── Credentials (NE JAMAIS COMMITER) ─────────────────────────────
 .env
 scraper/config.php
+deploy/
 
 # ── OS / IDE ──────────────────────────────────────────────────────
 .DS_Store

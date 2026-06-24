@@ -15,7 +15,7 @@ $sql_update = <<<SQL
 UPDATE courants SET
   description_longue = COALESCE(:extract, description_longue),
   image_wikipedia    = COALESCE(:img, image_wikipedia),
-  fetched_at         = datetime('now')
+  fetched_at         = :now
 WHERE slug = :slug
 SQL;
 
@@ -69,6 +69,7 @@ foreach (COURANTS_CONFIG as $courant) {
         ':slug'    => $slug,
         ':extract' => $extract,
         ':img'     => $img,
+        ':now'     => db_now(),
     ]);
 
     $has_img     = $img     ? "[img ✓]"  : "[img ✗]";

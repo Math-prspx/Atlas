@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS `courants` (
   `image_wikidata`    VARCHAR(500) DEFAULT NULL COMMENT 'URL image Wikimedia Commons (P18)',
   `image_wikipedia`   VARCHAR(500) DEFAULT NULL COMMENT 'URL thumbnail article Wikipedia',
 
+  -- Données éditoriales
+  `artistes`          TEXT         DEFAULT NULL COMMENT 'JSON array des artistes représentatifs',
+  `key_points`        TEXT         DEFAULT NULL COMMENT 'Description des principes visuels clés',
+
   -- DA éditorial (valeurs manuelles)
   `couleur_accent`    VARCHAR(7)   DEFAULT '#888888' COMMENT 'Hex color ex: #e63946',
   `typographie`       VARCHAR(100) DEFAULT '"Helvetica Neue", sans-serif',
@@ -108,7 +112,7 @@ CREATE TABLE IF NOT EXISTS `courant_artistes` (
 -- (positions 3D et valeurs éditoriales pré-remplies)
 -- ─────────────────────────────────────────────────────────────────
 
-INSERT INTO `courants`
+INSERT IGNORE INTO `courants`
   (`wikidata_id`, `wikipedia_titre`, `slug`, `nom`, `couleur_accent`, `typographie`, `pos_x`, `pos_y`, `pos_z`, `niveau`)
 VALUES
   ('Q330369', 'Arts and Crafts',                 'arts-crafts',      'Arts & Crafts',          '#c9a84c', '"Georgia", serif',                          -3,   0.5,   2,  1),
@@ -121,3 +125,44 @@ VALUES
   (NULL,       NULL,                             'grunge',           'Grunge Graphique',         '#c49a6c', '"Courier New", monospace',                  -3,  -1.5, -16,  1),
   ('Q15266360','Design plat',                    'flat-design',      'Flat Design',             '#00b4d8', '"Segoe UI", "Roboto", sans-serif',            0,    0,   -20,  1),
   ('Q811179', 'Pixel art',                       'pixel-art',        'Pixel Art',               '#06d6a0', '"Courier New", monospace',                  -5,   1.5, -11,  1);
+
+-- ── Sous-mouvements (niveau 2) ────────────────────────────────────
+INSERT IGNORE INTO `courants`
+  (`wikidata_id`, `wikipedia_titre`, `slug`, `nom`, `couleur_accent`, `typographie`, `pos_x`, `pos_y`, `pos_z`, `niveau`)
+VALUES
+  ('Q1050297', 'Aesthetic movement',         'aesthetic-movement',  'Aesthetic Movement',        '#b8860b', '"Palatino Linotype", serif',          -4.5,  1.5,   7.5, 2),
+  ('Q34627',   'Jugendstil',                 'jugendstil',          'Jugendstil',                '#8fbc8f', '"Palatino Linotype", serif',           5.0,  2.2,   5.5, 2),
+  ('Q193699',  'Vorticism',                  'vorticism',           'Vorticism',                 '#ff4500', '"Impact", sans-serif',                -6.5,  3.0,   1.8, 2),
+  ('Q744239',  'Neoplasticism',              'neoplasticisme',      'Néoplasticisme',             '#f7c500', '"Helvetica Neue", sans-serif',         4.0,  2.8,   0.2, 2),
+  (NULL,        NULL,                        'new-typography',      'New Typography',             '#d62828', '"Helvetica Neue", sans-serif',         1.5,  0.5,  -0.5, 2),
+  ('Q680909',  'Ulm School of Design',       'ulm-school',          'École d''Ulm',              '#457b9d', '"Helvetica Neue", sans-serif',        -1.5,  0.8,  -1.2, 2),
+  ('Q185023',  'Streamline Moderne',         'streamline',          'Streamline Moderne',         '#cd9b1d', '"Times New Roman", serif',             6.5,  1.8,  -1.0, 2),
+  ('Q80113',   'Op art',                     'op-art',              'Op Art',                    '#2d6a4f', '"Helvetica Neue", sans-serif',        -4.0,  0.0,  -7.5, 2),
+  ('Q200654',  'Lettrism',                   'lettrisme',           'Lettrisme',                 '#7b2d8b', '"Courier New", monospace',            -6.0,  2.8,  -1.5, 2),
+  (NULL,        NULL,                        'psychedelic-poster',  'Affiches Psychédéliques',    '#c77dff', '"Trebuchet MS", cursive',              7.0,  3.8, -10.5, 2),
+  (NULL,        NULL,                        'deconstruction-typo', 'Déconstruction Typo',        '#e056a0', '"Times New Roman", serif',             3.5, -2.5, -12.5, 2),
+  (NULL,        NULL,                        'neo-pop',             'Neo-Pop',                   '#ffc300', '"Impact", sans-serif',                 6.0,  2.2,  -8.0, 2),
+  ('Q17030296','Material Design',            'material-design',     'Material Design',            '#03a9f4', '"Roboto", sans-serif',                 0.5,  0.5, -18.5, 2),
+  ('Q27611341','Synthwave',                  'synthwave',           'Synthwave',                 '#f72585', '"Courier New", monospace',              6.0,  3.0, -19.0, 2),
+  (NULL,        NULL,                        'lo-fi-aesthetic',     'Lo-fi Aesthetic',            '#b392ac', '"Courier New", monospace',              3.0,  3.5, -19.5, 2);
+
+-- ── Relations parent → sous-mouvements ───────────────────────────
+INSERT IGNORE INTO `courant_relations` (`source_id`, `cible_id`, `type_relation`)
+SELECT s.id, c.id, 'derivation'
+FROM `courants` s JOIN `courants` c ON 1=1
+WHERE (s.slug = 'arts-crafts'    AND c.slug = 'aesthetic-movement')
+   OR (s.slug = 'art-nouveau'    AND c.slug = 'jugendstil')
+   OR (s.slug = 'futurisme'      AND c.slug = 'vorticism')
+   OR (s.slug = 'de-stijl'       AND c.slug = 'neoplasticisme')
+   OR (s.slug = 'bauhaus'        AND c.slug = 'new-typography')
+   OR (s.slug = 'bauhaus'        AND c.slug = 'ulm-school')
+   OR (s.slug = 'art-deco'       AND c.slug = 'streamline')
+   OR (s.slug = 'style-suisse'   AND c.slug = 'op-art')
+   OR (s.slug = 'surrealisme'    AND c.slug = 'lettrisme')
+   OR (s.slug = 'psychedelique'  AND c.slug = 'psychedelic-poster')
+   OR (s.slug = 'postmodernisme' AND c.slug = 'deconstruction-typo')
+   OR (s.slug = 'pop-art'        AND c.slug = 'neo-pop')
+   OR (s.slug = 'flat-design'    AND c.slug = 'material-design')
+   OR (s.slug = 'vaporwave'      AND c.slug = 'synthwave')
+   OR (s.slug = 'vaporwave'      AND c.slug = 'lo-fi-aesthetic');
+

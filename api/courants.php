@@ -40,7 +40,8 @@ function get_all_courants(PDO $pdo): array {
             id, slug, nom, wikidata_id,
             description_courte,
             periode_debut, periode_fin,
-            image_wikidata, image_wikipedia,
+            image_wikidata, image_wikipedia, image_3, image_4, image_5,
+            artistes, key_points,
             couleur_accent, typographie,
             mots_cles,
             pos_x, pos_y, pos_z, niveau
@@ -80,14 +81,19 @@ function get_all_courants(PDO $pdo): array {
                 'debut' => $row['periode_debut'] ? (int)$row['periode_debut'] : null,
                 'fin'   => $row['periode_fin']   ? (int)$row['periode_fin']   : null,
             ],
-            'images'             => [
-                'wikidata'  => $row['image_wikidata'],
-                'wikipedia' => $row['image_wikipedia'],
-            ],
+            'images'             => array_values(array_filter([
+                $row['image_wikidata'],
+                $row['image_wikipedia'],
+                $row['image_3'] ?? null,
+                $row['image_4'] ?? null,
+                $row['image_5'] ?? null,
+            ])),
             'da'                 => [
                 'couleur'    => $row['couleur_accent'],
                 'typo'       => $row['typographie'],
             ],
+            'artistes'           => $row['artistes'] ? json_decode($row['artistes'], true) : [],
+            'key_points'         => $row['key_points'] ?? '',
             'mots_cles'          => $row['mots_cles'] ? json_decode($row['mots_cles'], true) : [],
             'position'           => [
                 'x' => (float)$row['pos_x'],
@@ -164,6 +170,8 @@ function get_courant(PDO $pdo, string $slug): array {
             'couleur' => $row['couleur_accent'],
             'typo'    => $row['typographie'],
         ],
+        'artistes'           => $row['artistes'] ? json_decode($row['artistes'], true) : [],
+        'key_points'         => $row['key_points'] ?? '',
         'mots_cles'          => $row['mots_cles']         ? json_decode($row['mots_cles'], true) : [],
         'principes_visuels'  => $row['principes_visuels'],
         'position'           => [

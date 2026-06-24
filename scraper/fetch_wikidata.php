@@ -110,7 +110,7 @@ UPDATE courants SET
   periode_debut      = COALESCE(:debut, periode_debut),
   periode_fin        = COALESCE(:fin, periode_fin),
   image_wikidata     = COALESCE(:img, image_wikidata),
-  fetched_at         = datetime('now')
+  fetched_at         = :now
 WHERE wikidata_id = :qid
 SQL;
 
@@ -124,6 +124,7 @@ foreach ($resultats as $qid => $r) {
         ':debut'=> $r['periode_debut'],
         ':fin'  => $r['periode_fin'],
         ':img'  => $r['image_wikidata'],
+        ':now'  => db_now(),
     ]);
     $updated += $stmt->rowCount();
 
