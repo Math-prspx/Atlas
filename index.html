@@ -26,7 +26,14 @@
     <div id="timeline-years"></div>
     <div id="timeline-line"></div>
     <div id="timeline-dots"></div>
-    <div id="timeline-marker"><span id="timeline-marker-year"></span><span id="timeline-marker-nom"></span></div>
+    <div id="timeline-marker"><span id="timeline-marker-year"></span><span id="timeline-marker-nom"></span><div id="tl-tab"><span id="tl-tab-year"></span><span class="tl-tab-sep"> · </span><span id="tl-tab-nom"></span><span id="tl-tab-arrow">↑</span></div></div>
+  </div>
+
+  <div id="tl-tooltip">
+    <div id="tl-tooltip-inner">
+      <button id="tl-tooltip-close" title="Réduire">↓</button>
+      <div id="tl-tooltip-scroll"></div>
+    </div>
   </div>
 
   <div id="lightbox">
@@ -155,7 +162,7 @@
   const CAM_START      = new THREE.Vector3(0, 35, 18);  // vue haute inclinée, up standard
   const CAM_END        = new THREE.Vector3(6.75, 5.25, 24.75);
   const CAM_LOOK_START = new THREE.Vector3(0, 0, -4.5);
-  const CAM_TRANS_DUR  = 3.2;
+  const CAM_TRANS_DUR  = 2.0;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -199,8 +206,8 @@
     { dx: -2.2,  dy:  0.6,  dz: -0.3,  ry:  16, w: 185, h: 260, type: 'image' },
     { dx:  0.5,  dy: -1.0,  dz:  0.8,  ry:  -7, w: 250, h: 155, type: 'image' },
     { dx: -0.9,  dy:  1.3,  dz: -1.6,  ry:  12, w: 220, h: 145, type: 'image' },
-    { dx:  4.1,  dy: -0.6,  dz: -0.5,  ry: -24, w: 210, h: 290, type: 'image' },
-    { dx: -1.8,  dy: -0.9,  dz:  0.35, ry:   0, w: 338, h: 411, type: 'info', res: 3 },
+    { dx:  4.6,  dy: -0.6,  dz: -0.5,  ry: -24, w: 210, h: 290, type: 'image' },
+    { dx: -2.7,  dy: -0.9,  dz:  0.35, ry:  -8, w: 235, h: 165, type: 'image' },
   ];
   let floatingCards = [];
   let cardHitPlanes = [];
@@ -212,6 +219,7 @@
   composer.addPass(new OutputPass());
 
   // Variables d’état partagées — déclarées avant animate() pour éviter le TDZ
+  let _frame = 0;
   let nodeMap = {}, nodeMeshes = [], ringMeshes = [], edgeMeshes = [], pMat = null;
   const nodeGeoN1     = new THREE.BoxGeometry(0.175, 0.175, 0.175);
   const nodeGeoN2     = new THREE.SphereGeometry(0.09, 12, 8);
@@ -361,9 +369,8 @@
   // Preload fichiers audio (ArrayBuffer) — progression 65→100%
   // Stockés dans eraAudioCache pour lecture instantanée au premier clic
   const ERA_FILES = [
-    'sounds/1880.wav','sounds/1900.mp3','sounds/1910.mp3','sounds/1930.wav',
-    'sounds/1940.mp3','sounds/1950.mp3','sounds/1960.mp3','sounds/1970.mp3',
-    'sounds/1980.wav','sounds/1990.wav','sounds/2000.mp3','sounds/2010.wav',
+    'sounds/1800.mp3','sounds/1880.mp3','sounds/1910.mp3','sounds/1930.mp3',
+    'sounds/1950.mp3','sounds/1975.mp3','sounds/1995.mp3','sounds/2010.mp3',
   ];
   const eraAudioCache = {};
   const audioTotal = ERA_FILES.length;
@@ -492,72 +499,49 @@
       el.className = 'float-card';
       el.style.width  = off.w + 'px';
 
-      if (off.type === 'info') {
-        el.style.pointerEvents = 'auto';
-        const fic = document.createElement('div');
-        fic.className = 'float-info-card';
-        fic.style.borderLeftColor = c.couleur;
-        const artistesHtml = (c.artistes?.length)
-          ? `<div class="fic-label">Artistes</div><div class="fic-artistes">${c.artistes.map(a => `<div>${a}</div>`).join('')}</div>`
-          : '';
-        const principesHtml = c.principes
-          ? `<div class="fic-label">Principes</div><div class="fic-principes">${c.principes}</div>`
-          : '';
-        fic.innerHTML = `
-          <div class="fic-periode">${c.periode || ''}</div>
-          <div class="fic-nom" style="font-family:${c.typographie};color:${c.couleur}">${c.nom}</div>
-          <div class="fic-bar" style="background:${c.couleur}"></div>
-          <div class="fic-desc">${c.description || ''}</div>
-          ${artistesHtml}${principesHtml}
-        `;
-        el.appendChild(fic);
+      const src = imgs[i] || null;
+      // Clics gérés via hit planes THREE.js (voir cardHitPlanes) — plus fiable que CSS3D hit-testing
+      el.style.pointerEvents = 'none';
+      if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        el.appendChild(img);
       } else {
-        const src = imgs[i] || null;
-        // Clics gérés via hit planes THREE.js (voir cardHitPlanes) — plus fiable que CSS3D hit-testing
-        el.style.pointerEvents = 'none';
-        if (src) {
-          const img = document.createElement('img');
-          img.src = src;
-          el.appendChild(img);
-        } else {
-          el.style.height = off.h + 'px';
-          const inner = document.createElement('div');
-          inner.className = 'float-card-inner';
-          inner.style.background = `linear-gradient(135deg, ${c.couleur}22 0%, ${c.couleur}07 100%)`;
-          inner.style.border     = `1px solid ${c.couleur}30`;
-          inner.style.width      = '100%';
-          inner.style.height     = '100%';
-          const lbl = document.createElement('span');
-          lbl.style.cssText = `font-family:${c.typographie};font-size:${8+i}px;letter-spacing:0.45em;text-transform:uppercase;color:${c.couleur};opacity:0.35`;
-          lbl.textContent = c.nom;
-          inner.appendChild(lbl);
-          el.appendChild(inner);
-        }
+        el.style.height = off.h + 'px';
+        const inner = document.createElement('div');
+        inner.className = 'float-card-inner';
+        inner.style.background = `linear-gradient(135deg, ${c.couleur}22 0%, ${c.couleur}07 100%)`;
+        inner.style.border     = `1px solid ${c.couleur}30`;
+        inner.style.width      = '100%';
+        inner.style.height     = '100%';
+        const lbl = document.createElement('span');
+        lbl.style.cssText = `font-family:${c.typographie};font-size:${8+i}px;letter-spacing:0.45em;text-transform:uppercase;color:${c.couleur};opacity:0.35`;
+        lbl.textContent = c.nom;
+        inner.appendChild(lbl);
+        el.appendChild(inner);
       }
 
       const obj = new CSS3DObject(el);
       obj.position.set(pos.x + off.dx, pos.y + off.dy, pos.z + off.dz);
-      obj.rotation.y    = off.type === 'info' ? camRy : camRy + off.ry * Math.PI / 180;
+      obj.rotation.y    = camRy + off.ry * Math.PI / 180;
       obj.scale.setScalar(CARD_SCALE / (off.res || 1));
       obj.userData.baseY = pos.y + off.dy;
       obj.userData.baseX = pos.x + off.dx;
       obj.userData.phase = i * 1.5;
-      obj.userData.ampY  = off.type === 'info' ? 0.025 : 0.06 + i * 0.015;
+      obj.userData.ampY  = 0.06 + i * 0.015;
       cssScene.add(obj);
       floatingCards.push(obj);
-      // Plan invisible THREE.js pour hit-testing fiable des image cards
-      if (off.type !== 'info') {
-        const planeGeo = new THREE.PlaneGeometry(off.w * CARD_SCALE, off.h * CARD_SCALE);
-        const planeMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
-        const plane = new THREE.Mesh(planeGeo, planeMat);
-        plane.position.copy(obj.position);
-        plane.rotation.y = obj.rotation.y;
-        plane.userData.cardImages = imgs;
-        plane.userData.cardIndex  = i;
-        plane.userData.floatRef   = obj;
-        scene.add(plane);
-        cardHitPlanes.push(plane);
-      }
+      // Plan invisible THREE.js pour hit-testing fiable
+      const planeGeo = new THREE.PlaneGeometry(off.w * CARD_SCALE, off.h * CARD_SCALE);
+      const planeMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+      const plane = new THREE.Mesh(planeGeo, planeMat);
+      plane.position.copy(obj.position);
+      plane.rotation.y = obj.rotation.y;
+      plane.userData.cardImages = imgs;
+      plane.userData.cardIndex  = i;
+      plane.userData.floatRef   = obj;
+      scene.add(plane);
+      cardHitPlanes.push(plane);
       setTimeout(() => el.classList.add('visible'), 480 + i * 54);
     });
   }
@@ -570,12 +554,133 @@
   }
 
   // ─────────────────────────────────────────────────────────────────
+  // INFO PANEL 2D
+  // ─────────────────────────────────────────────────────────────────
+
+  const tlTabEl         = document.getElementById('tl-tab');
+  const tlTabYearEl     = document.getElementById('tl-tab-year');
+  const tlTabNomEl      = document.getElementById('tl-tab-nom');
+  const tooltipEl       = document.getElementById('tl-tooltip');
+  const tooltipScrollEl = document.getElementById('tl-tooltip-scroll');
+  const tooltipCloseEl  = document.getElementById('tl-tooltip-close');
+  let   currentPanelSlug = null;
+  let   currentCourant   = null;
+
+  function openInfoPanel(slug, c) {
+    currentPanelSlug     = slug;
+    currentCourant       = c;
+    tooltipEl.classList.remove('open');
+    tlTabYearEl.textContent = c?.periode || '';
+    tlTabNomEl.textContent  = c?.nom     || '';
+    const col = c?.couleur || null;
+    tlTabEl.style.borderColor      = col ? col : '';
+    tlTabEl.style.backgroundColor  = col ? col : '';
+    tlTabEl.style.color            = col ? '#fff' : '';
+    tlTabEl.classList.add('visible');
+  }
+
+  function positionTooltip() {
+    const tlEl      = document.getElementById('timeline');
+    const markerEl  = document.getElementById('timeline-marker');
+    const tlRect    = tlEl.getBoundingClientRect();
+    const markerPct = parseFloat(markerEl.style.left) / 100 || 0.5;
+    const markerX   = tlRect.left + tlRect.width * markerPct;
+    const tipW      = Math.min(650, window.innerWidth - 32);
+    const tipLeft   = Math.max(16, Math.min(markerX - tipW / 2, window.innerWidth - tipW - 16));
+    tooltipEl.style.left  = tipLeft + 'px';
+    tooltipEl.style.width = tipW + 'px';
+  }
+
+  function openTooltip() {
+    if (!currentPanelSlug || !currentCourant) return;
+    positionTooltip();
+    tooltipScrollEl.innerHTML = `
+      <div class="ip-skel ip-skel-short"></div>
+      <div class="ip-skel ip-skel-title"></div>
+      <div class="ip-skel ip-skel-bar"></div>
+      <div class="ip-skel ip-skel-text"></div>
+      <div class="ip-skel ip-skel-text w85"></div>
+      <div class="ip-skel ip-skel-text"></div>
+      <div class="ip-skel ip-skel-text w70"></div>
+    `;
+    tooltipEl.classList.add('open');
+    const col = currentCourant?.couleur || null;
+    const inner = document.getElementById('tl-tooltip-inner');
+    if (inner) inner.style.borderColor = col ? col : '';
+    if (inner) inner.style.boxShadow   = col ? `0 8px 40px ${col}33` : '0 8px 40px rgba(0,0,0,0.12)';
+    const slug = currentPanelSlug;
+    const c    = currentCourant;
+    fetch(`api/courants.php?slug=${encodeURIComponent(slug)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (currentPanelSlug !== slug) return;
+        renderInfoPanel(data, c);
+      })
+      .catch(() => { if (currentPanelSlug === slug) renderInfoPanel(null, c); });
+  }
+
+  function renderInfoPanel(data, c) {
+    const desc      = data?.description_longue || data?.description_courte || c?.description || '';
+    const artistes  = (data?.artistes?.length ? data.artistes : null) || c?.artistes || [];
+    const keypoints = data?.key_points || c?.principes || '';
+    const mots_cles = data?.mots_cles || c?.mots_cles || [];
+    const wikiUrl   = data?.wikipedia_url || null;
+    const couleur   = c?.couleur || '#888';
+    const typo      = c?.typographie || 'inherit';
+
+    const artistesHtml = artistes.length ? `
+      <div class="ip-section-label">Artistes</div>
+      <ul id="ip-artistes">
+        ${artistes.map(a => {
+          const nom   = typeof a === 'string' ? a : (a.nom || a);
+          const dates = a.naissance ? `${a.naissance}${a.deces ? ` – ${a.deces}` : ''}` : '';
+          const nat   = a.nationalite ? ` · ${a.nationalite}` : '';
+          const url   = a.wikipedia_url || null;
+          const inner = `<span class="ip-artiste-nom">${nom}</span><span class="ip-artiste-meta">${dates}${nat}</span>`;
+          return `<li>${url
+            ? `<a class="ip-artiste" href="${url}" target="_blank" rel="noopener">${inner}</a>`
+            : `<div class="ip-artiste">${inner}</div>`
+          }</li>`;
+        }).join('')}
+      </ul>` : '';
+
+    const keypointsHtml = keypoints
+      ? `<div class="ip-section-label">Principes</div><div id="ip-keypoints">${keypoints}</div>` : '';
+
+    const tagsHtml = mots_cles.length
+      ? `<div id="ip-tags">${mots_cles.map(t => `<span class="ip-tag" style="color:${couleur}">${t}</span>`).join('')}</div>` : '';
+
+    const wikiHtml = wikiUrl
+      ? `<a id="ip-wiki" href="${wikiUrl}" target="_blank" rel="noopener">↗ Wikipedia</a>` : '';
+
+    tooltipScrollEl.innerHTML = `
+      <div id="ip-periode">${c?.periode || ''}</div>
+      <div id="ip-nom" style="font-family:${typo};color:${couleur}">${c?.nom || ''}</div>
+      <div id="ip-bar" style="background:${couleur}"></div>
+      <div id="ip-desc">${desc}</div>
+      ${wikiHtml}
+      ${artistesHtml}
+      ${keypointsHtml}
+      ${tagsHtml}
+    `;
+    tooltipScrollEl.scrollTop = 0;
+  }
+
+  function closeInfoPanel() {
+    tlTabEl.classList.remove('visible');
+    tooltipEl.classList.remove('open');
+    currentPanelSlug = null;
+    currentCourant   = null;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
   // NAVIGATION
   // ─────────────────────────────────────────────────────────────────
 
   const bgTypoSpan = document.querySelector('#bg-typo span');
 
   function navigateTo(c, mesh) {
+    if (camTransition || isZooming) return;
     lerpTarget.copy(c.position);
 
     // Typo monumentale
@@ -630,8 +735,10 @@
     const approachDist = 5.5;
     lerpCameraPos.copy(c.position).addScaledVector(finalDir, approachDist);
     isZooming = true;
+    controls.enabled = false;
     pendingCardCourant = c; // cartes spawnées une fois la caméra arrivée
     clearFloatingCards();   // vider immédiatement les cartes de la sélection précédente
+    openInfoPanel(c.id, c);
 
     // ERA AUDIO
     if (audioStarted && !audioMuted) {
@@ -650,30 +757,35 @@
   let   cursorX = 0, cursorY = 0;
 
   // Curseur personnalisé
+  let _rayPending = false;
   window.addEventListener('mousemove', e => {
     cursorX = e.clientX;
     cursorY = e.clientY;
     cursorEl.style.left = cursorX + 'px';
     cursorEl.style.top  = cursorY + 'px';
-
     mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const hits = raycaster.intersectObjects(nodeMeshes);
-    if (hits.length > 0) {
-      const col = hits[0].object.userData.couleur || '#111';
-      cursorEl.style.width       = '16px';
-      cursorEl.style.height      = '16px';
-      cursorEl.style.background  = col;
-      cursorEl.style.borderColor = col;
-      cursorEl.style.opacity     = '0.85';
-    } else {
-      cursorEl.style.width       = '10px';
-      cursorEl.style.height      = '10px';
-      cursorEl.style.background  = 'transparent';
-      cursorEl.style.borderColor = document.documentElement.dataset.theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)';
-      cursorEl.style.opacity     = '1';
-    }
+    if (_rayPending) return;
+    _rayPending = true;
+    requestAnimationFrame(() => {
+      _rayPending = false;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(nodeMeshes);
+      if (hits.length > 0) {
+        const col = hits[0].object.userData.couleur || '#111';
+        cursorEl.style.width       = '16px';
+        cursorEl.style.height      = '16px';
+        cursorEl.style.background  = col;
+        cursorEl.style.borderColor = col;
+        cursorEl.style.opacity     = '0.85';
+      } else {
+        cursorEl.style.width       = '10px';
+        cursorEl.style.height      = '10px';
+        cursorEl.style.background  = 'transparent';
+        cursorEl.style.borderColor = document.documentElement.dataset.theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)';
+        cursorEl.style.opacity     = '1';
+      }
+    });
   });
 
   function addStopAutoRotate() {
@@ -694,8 +806,9 @@
 
   window.addEventListener('click', e => {
     // Ignorer les clics sur les éléments UI (boutons, timeline, nav-dots)
-    if (e.target.closest('#btn-mute, #btn-theme, #timeline, #nav-dots, #lightbox, #ls')) return;
+    if (e.target.closest('#btn-mute, #btn-theme, #timeline, #nav-dots, #lightbox, #ls, #tl-tooltip')) return;
     if (pointerMoved) return;
+    if (camTransition || isZooming) return;
     mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
@@ -720,6 +833,7 @@
 
   function deselect() {
     clearFloatingCards();
+    closeInfoPanel();
     pendingCardCourant = null;
     stopEraAudio();
     if (activeNodeMesh) {
@@ -736,6 +850,7 @@
 
   function resetView() {
     clearFloatingCards();
+    closeInfoPanel();
     stopEraAudio();
     if (activeNodeMesh) {
       const isN2 = activeNodeMesh.userData.niveau === 2;
@@ -747,6 +862,7 @@
     lerpTarget.set(0, 0, -9.75);
     lerpCameraPos.set(6.75, 5.25, 24.75);
     isZooming = true;
+    controls.enabled = false;
     controls.autoRotate = true;
     addStopAutoRotate();
     bgTypoSpan.style.opacity = '0';
@@ -757,6 +873,7 @@
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (lightboxEl.classList.contains('active')) { closeLightbox(); return; }
+      if (tooltipEl.classList.contains('open')) { tooltipEl.classList.remove('open'); return; }
       deselect();
     }
     if (lightboxEl.classList.contains('active')) {
@@ -800,6 +917,9 @@
 
   lbClose.addEventListener('click', closeLightbox);
   lightboxEl.addEventListener('click', e => { if (e.target === lightboxEl) closeLightbox(); });
+
+  tlTabEl.addEventListener('click', openTooltip);
+  tooltipCloseEl.addEventListener('click', () => tooltipEl.classList.remove('open'));
   lbPrev.addEventListener('click', e => {
     e.stopPropagation();
     lbIndex = (lbIndex - 1 + lbImages.length) % lbImages.length;
@@ -889,18 +1009,14 @@
   // ─────────────────────────────────────────────────────────────────
 
   const ERA_BUCKETS = [
-    { from: 1850, to: 1900, file: 'sounds/1880.wav'  },
-    { from: 1900, to: 1910, file: 'sounds/1900.mp3'  },
-    { from: 1910, to: 1920, file: 'sounds/1910.mp3'  },
-    { from: 1920, to: 1940, file: 'sounds/1930.wav'  }, // pas de fichier 1920
-    { from: 1940, to: 1950, file: 'sounds/1940.mp3'  },
-    { from: 1950, to: 1960, file: 'sounds/1950.mp3'  },
-    { from: 1960, to: 1970, file: 'sounds/1960.mp3'  },
-    { from: 1970, to: 1980, file: 'sounds/1970.mp3'  },
-    { from: 1980, to: 1990, file: 'sounds/1980.wav'  },
-    { from: 1990, to: 2000, file: 'sounds/1990.wav'  },
-    { from: 2000, to: 2010, file: 'sounds/2000.mp3'  },
-    { from: 2010, to: 2030, file: 'sounds/2010.wav'  },
+    { from:    0, to: 1880, file: 'sounds/1800.mp3' }, // < 1880 : romantique tardif
+    { from: 1880, to: 1910, file: 'sounds/1880.mp3' }, // impressionnisme
+    { from: 1910, to: 1930, file: 'sounds/1910.mp3' }, // jazz primitif
+    { from: 1930, to: 1950, file: 'sounds/1930.mp3' }, // swing
+    { from: 1950, to: 1975, file: 'sounds/1950.mp3' }, // électronique expérimentale
+    { from: 1975, to: 1995, file: 'sounds/1975.mp3' }, // synthés / new wave
+    { from: 1995, to: 2010, file: 'sounds/1995.mp3' }, // electronica ambient
+    { from: 2010, to: 2100, file: 'sounds/2010.mp3' }, // nappes numériques
   ];
 
   let eraSource      = null;
@@ -969,6 +1085,7 @@
 
   function animate() {
     requestAnimationFrame(animate);
+    _frame++;
     const t = clock.getElapsedTime();
 
     if (activeNodeMesh) {
@@ -977,9 +1094,10 @@
     }
     // Zoom vers le noeud actif — cartes spawnées à l'arrivée
     if (isZooming) {
-      camera.position.lerp(lerpCameraPos, 0.03);
+      camera.position.lerp(lerpCameraPos, 0.05);
       if (camera.position.distanceTo(lerpCameraPos) < 0.25) {
         isZooming = false;
+        controls.enabled = true;
         if (pendingCardCourant) {
           spawnFloatingCards(pendingCardCourant);
           pendingCardCourant = null;
@@ -1041,8 +1159,8 @@
       if (ref) { plane.position.x = ref.position.x; plane.position.y = ref.position.y; }
     });
 
-    updateLabels();
-    updateNavDots();
+    if (_frame % 2 === 0) updateLabels();
+    if (_frame % 6 === 0) updateNavDots();
     composer.render();
     cssRenderer.render(cssScene, camera);
   }
@@ -1050,20 +1168,6 @@
   hideLoadingScreen(() => {
     camTransition = true;
     camTransitionStart = clock.getElapsedTime();
-    renderer.domElement.addEventListener('pointerdown', () => {
-      if (!camTransition) return;
-      camTransition = false;
-      camera.position.copy(CAM_END);
-      nodeMeshes.forEach(m => {
-        if (m !== activeNodeMesh) m.material.color.set(m.userData.niveau === 2 ? COLOR_N2 : COLOR_DEFAULT);
-        m.material.opacity = 1;
-      });
-      edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity; });
-      pMat.opacity = 0.8;
-      scene.fog = new THREE.FogExp2(_isDark ? 0x000000 : 0xffffff, 0.0093);
-      bokehPass.uniforms['aperture'].value = 0.0015;
-      controls.enabled = true; controls.autoRotate = true; controls.update();
-    }, { once: true });
     setTimeout(() => {
       const titleEl    = document.getElementById('title');
       const hintEl     = document.getElementById('hint');

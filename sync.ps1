@@ -44,9 +44,10 @@ Sync-File ".htaccess"    ".htaccess"
 Sync-File "api\courants.php"   "api\courants.php"
 
 # Scrapers (pas config.php - credentials prod differents)
-Sync-File "scraper\fetch_wikidata.php"      "scraper\fetch_wikidata.php"
-Sync-File "scraper\fetch_wikipedia.php"     "scraper\fetch_wikipedia.php"
-Sync-File "scraper\fetch_cooperhewitt.php"  "scraper\fetch_cooperhewitt.php"
+Sync-File "scraper\fetch_wikidata.php"            "scraper\fetch_wikidata.php"
+Sync-File "scraper\fetch_wikipedia.php"           "scraper\fetch_wikipedia.php"
+Sync-File "scraper\fetch_cooperhewitt.php"        "scraper\fetch_cooperhewitt.php"
+Sync-File "scraper\fetch_artistes_wikipedia.php"  "scraper\fetch_artistes_wikipedia.php"
 
 Write-Host ""
 Write-Host "  $ok fichier(s) mis a jour, $skip ignore(s)." -ForegroundColor White
