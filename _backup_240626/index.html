@@ -26,7 +26,14 @@
     <div id="timeline-years"></div>
     <div id="timeline-line"></div>
     <div id="timeline-dots"></div>
-    <div id="timeline-marker"><span id="timeline-marker-year"></span><span id="timeline-marker-nom"></span></div>
+    <div id="timeline-marker"><span id="timeline-marker-year"></span><span id="timeline-marker-nom"></span><div id="tl-tab"><span id="tl-tab-year"></span><span class="tl-tab-sep"> · </span><span id="tl-tab-nom"></span><span id="tl-tab-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="7" height="4" viewBox="0 0 9 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,5 4.5,1 8,5"/></svg></span></div></div>
+  </div>
+
+  <div id="tl-tooltip">
+    <div id="tl-tooltip-inner">
+      <button id="tl-tooltip-close" title="Réduire"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="7" viewBox="0 0 11 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,1 5.5,6 10,1"/></svg></button>
+      <div id="tl-tooltip-scroll"></div>
+    </div>
   </div>
 
   <div id="lightbox">
@@ -150,7 +157,94 @@
     }, 300);
   }
 
-  // Chargement API avec fallback hardcodé minimal
+  // ─── THREE.JS INIT — scène active pendant le loading, nœuds apparaissent au fur et à mesure ───
+  const _isDark = localStorage.getItem('atlas-theme') === 'dark';
+  const CAM_START      = new THREE.Vector3(0, 35, 18);  // vue haute inclinée, up standard
+  const CAM_END        = new THREE.Vector3(6.75, 5.25, 24.75);
+  const CAM_LOOK_START = new THREE.Vector3(0, 0, -4.5);
+  const CAM_TRANS_DUR  = 2.0;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMappingExposure = 1;
+  document.body.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(_isDark ? 0x000000 : 0xffffff);
+  scene.fog = null; // activé après la transition caméra
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.copy(CAM_START);
+  camera.lookAt(CAM_LOOK_START);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping   = true;
+  controls.dampingFactor   = 0.06;
+  controls.enablePan       = false;
+  controls.minDistance     = 2.25;
+  controls.maxDistance     = 67;
+  controls.autoRotate      = false;
+  controls.autoRotateSpeed = 0.25;
+  controls.enabled         = false;
+  controls.target.set(0, 0, -9.75);
+  controls.update();
+  const lerpTarget = new THREE.Vector3(0, 0, -9.75);
+
+  const cssRenderer = new CSS3DRenderer();
+  cssRenderer.setSize(window.innerWidth, window.innerHeight);
+  Object.assign(cssRenderer.domElement.style, {
+    position: 'fixed', top: '0', left: '0', pointerEvents: 'none', zIndex: '2'
+  });
+  document.body.appendChild(cssRenderer.domElement);
+  const cssScene = new THREE.Scene();
+
+  const CARD_SCALE = 1 / 110;
+  const CARD_OFFSETS = [
+    { dx:  1.8,  dy:  0.35, dz:  0.2,  ry: -18, w: 300, h: 190, type: 'image' },
+    { dx: -2.2,  dy:  0.6,  dz: -0.3,  ry:  16, w: 185, h: 260, type: 'image' },
+    { dx:  0.5,  dy: -1.0,  dz:  0.8,  ry:  -7, w: 250, h: 155, type: 'image' },
+    { dx: -0.9,  dy:  1.3,  dz: -1.6,  ry:  12, w: 220, h: 145, type: 'image' },
+    { dx:  4.6,  dy: -0.6,  dz: -0.5,  ry: -24, w: 210, h: 290, type: 'image' },
+    { dx: -2.7,  dy: -0.9,  dz:  0.35, ry:  -8, w: 235, h: 165, type: 'image' },
+  ];
+  let floatingCards = [];
+  let cardHitPlanes = [];
+
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bokehPass = new BokehPass(scene, camera, { focus: 50.0, aperture: 0.0003, maxblur: 0.004 });
+  composer.addPass(bokehPass);
+  composer.addPass(new OutputPass());
+
+  // Variables d’état partagées — déclarées avant animate() pour éviter le TDZ
+  let _frame = 0;
+  let nodeMap = {}, nodeMeshes = [], ringMeshes = [], edgeMeshes = [], pMat = null;
+  const nodeGeoN1     = new THREE.BoxGeometry(0.175, 0.175, 0.175);
+  const nodeGeoN2     = new THREE.SphereGeometry(0.09, 12, 8);
+  const COLOR_DEFAULT = new THREE.Color(0x444444);
+  const COLOR_N2      = new THREE.Color(0x666666);
+  const COLOR_ACTIVE  = new THREE.Color(0x111111);
+  let activeNodeMesh  = null;
+  let lerpCameraPos   = new THREE.Vector3(4, 3, 14);
+  let isZooming       = false;
+  let pendingCardCourant  = null;
+  let camTransition = false, camTransitionStart = 0;
+  let labelEls = [];       // peuplé après API fetch
+  let tlDotMap = {};       // peuplé après API fetch
+  let courants = [], edges = []; // peuplé après API fetch
+  let navDotsEl = null;          // peuplé après API fetch
+
+  document.getElementById('title').style.opacity    = '0';
+  document.getElementById('hint').style.opacity     = '0';
+  document.getElementById('timeline').style.opacity = '0';
+
+  const clock = new THREE.Clock();
+  clock.start();
+  animate(); // function declaration hoistée — scène vide au départ, se peuple après API
+
+  // ─── CHARGEMENT API ─────────────────────────────────────────────────
   setProgress(5);
   let _apiData;
   try {
@@ -193,7 +287,7 @@
     ['grunge','flat-design'],['postmodernisme','flat-design'],
   ];
 
-  let courants, edges;
+  // courants et edges sont déclarés dans le bloc init — on les assigne ici
   if (_apiData) {
     ({ courants, edges } = mapApiData(_apiData));
   } else {
@@ -207,24 +301,76 @@
     edges = FALLBACK_EDGES.map(([from, to]) => ({ from, to }));
   }
 
-  // Preload image_1 de chaque courant — progression 20→65%
-  const imageTargets = courants.map(c => ({ nom: c.nom, url: (c.images || [])[0] || null })).filter(t => t.url);
-  const imgTotal = imageTargets.length || 1;
-  await Promise.all(imageTargets.map((t, i) => new Promise(resolve => {
-    const img = new Image();
-    img.onload = img.onerror = () => {
-      setProgress(20 + ((i + 1) / imgTotal) * 45, t.nom.toUpperCase());
+  // ─── NŒUDS, ARÊTES, PARTICULES — créés dès que courants est disponible ───────────────
+  courants.forEach(c => {
+    const isN2 = c.niveau === 2;
+    const geo  = isN2 ? nodeGeoN2 : nodeGeoN1;
+    const mat  = new THREE.MeshBasicMaterial({ color: isN2 ? COLOR_N2.clone() : COLOR_DEFAULT.clone(), transparent: true, opacity: 0 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(c.position);
+    mesh.scale.setScalar(1);
+    mesh.userData = c;
+    scene.add(mesh);
+    nodeMap[c.id] = mesh;
+    nodeMeshes.push(mesh);
+    const rInner = isN2 ? 0.10 : 0.17;
+    const rOuter = isN2 ? 0.13 : 0.21;
+    const ringGeo = new THREE.RingGeometry(rInner, rOuter, 40);
+    const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x111111), transparent: true, opacity: 0, side: THREE.DoubleSide });
+    const ring    = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.copy(c.position);
+    scene.add(ring);
+    ringMeshes.push(ring);
+  });
+  edges.forEach(e => {
+    const a = nodeMap[e.from], b = nodeMap[e.to];
+    if (!a || !b) return;
+    const isSubEdge = a.userData.niveau === 2 || b.userData.niveau === 2;
+    const mid = a.position.clone().lerp(b.position, 0.5)
+      .add(new THREE.Vector3((Math.random()-0.5)*1.8,(Math.random()-0.5)*1.2,0));
+    const curve   = new THREE.QuadraticBezierCurve3(a.position, mid, b.position);
+    const tubeGeo = new THREE.TubeGeometry(curve, 24, isSubEdge ? 0.006 : 0.012, 6, false);
+    const tubeMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0 });
+    const edgeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+    edgeMesh.userData.targetOpacity = isSubEdge ? 0.25 : 0.5;
+    scene.add(edgeMesh);
+    edgeMeshes.push(edgeMesh);
+  });
+  {
+    const pCount = 4000;
+    const pPos = new Float32Array(pCount * 3);
+    for (let i = 0; i < pCount; i++) {
+      pPos[i*3]=(Math.random()-0.5)*100; pPos[i*3+1]=(Math.random()-0.5)*70; pPos[i*3+2]=(Math.random()-0.5)*100;
+    }
+    const pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    pMat = new THREE.PointsMaterial({ color: 0x555555, size: 0.09, transparent: true, opacity: 0, sizeAttenuation: true });
+    scene.add(new THREE.Points(pGeo, pMat));
+  }
+
+  // ─── PRELOAD IMAGES — allume les nœuds en 3D au fur et à mesure ────────────────
+  const imgTotal = courants.length || 1;
+  let imgDone = 0;
+  await Promise.all(courants.map(c => new Promise(resolve => {
+    const url = (c.images || [])[0] || null;
+    const done = () => {
+      imgDone++;
+      setProgress(20 + (imgDone / imgTotal) * 45, c.nom.toUpperCase());
+      nodeMap[c.id].material.color.set(c.couleur);
+      nodeMap[c.id].material.opacity = 1;
       resolve();
     };
-    img.src = t.url;
+    if (!url) { done(); return; }
+    const img = new Image();
+    img.onload = img.onerror = done;
+    img.src = url;
   })));
 
   // Preload fichiers audio (ArrayBuffer) — progression 65→100%
   // Stockés dans eraAudioCache pour lecture instantanée au premier clic
   const ERA_FILES = [
-    'sounds/1880.wav','sounds/1900.mp3','sounds/1910.mp3','sounds/1930.wav',
-    'sounds/1940.mp3','sounds/1950.mp3','sounds/1960.mp3','sounds/1970.mp3',
-    'sounds/1980.wav','sounds/1990.wav','sounds/2000.mp3','sounds/2010.wav',
+    'sounds/1800.mp3','sounds/1880.mp3','sounds/1910.mp3','sounds/1930.mp3',
+    'sounds/1950.mp3','sounds/1975.mp3','sounds/1995.mp3','sounds/2010.mp3',
   ];
   const eraAudioCache = {};
   const audioTotal = ERA_FILES.length;
@@ -240,169 +386,11 @@
   }));
 
   // ─────────────────────────────────────────────────────────────────
-  // RENDERER
-  // ─────────────────────────────────────────────────────────────────
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.toneMapping = THREE.NoToneMapping;
-  renderer.toneMappingExposure = 1;
-  document.body.prepend(renderer.domElement);
-
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);
-  scene.fog = new THREE.FogExp2(0xffffff, 0.0093);
-
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
-  camera.position.set(6.75, 5.25, 24.75);
-
-  // ─────────────────────────────────────────────────────────────────
-  // ORBIT CONTROLS
-  // ─────────────────────────────────────────────────────────────────
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping    = true;
-  controls.dampingFactor    = 0.06;
-  controls.enablePan        = false;
-  controls.minDistance      = 2.25;
-  controls.maxDistance      = 67;
-  controls.autoRotate       = true;
-  controls.autoRotateSpeed  = 0.25;
-  controls.target.set(0, 0, -9.75);
-  controls.update();
-
-  const lerpTarget = new THREE.Vector3(0, 0, -9.75);
-
-  // ─────────────────────────────────────────────────────────────────
-  // CSS3D RENDERER (floating image cards)
-  // ─────────────────────────────────────────────────────────────────
-
-  const cssRenderer = new CSS3DRenderer();
-  cssRenderer.setSize(window.innerWidth, window.innerHeight);
-  Object.assign(cssRenderer.domElement.style, {
-    position: 'fixed', top: '0', left: '0', pointerEvents: 'none', zIndex: '2'
-  });
-  document.body.appendChild(cssRenderer.domElement);
-  const cssScene = new THREE.Scene();
-
-  // Positions relatives au nœud, tailles en px (CARD_SCALE = 1 unit / 110px)
-  const CARD_SCALE = 1 / 110;
-  const CARD_OFFSETS = [
-    { dx:  1.8,  dy:  0.35, dz:  0.2,  ry: -18, w: 300, h: 190, type: 'image' },
-    { dx: -2.2,  dy:  0.6,  dz: -0.3,  ry:  16, w: 185, h: 260, type: 'image' },
-    { dx:  0.5,  dy: -1.0,  dz:  0.8,  ry:  -7, w: 250, h: 155, type: 'image' },
-    { dx: -0.9,  dy:  1.3,  dz: -1.6,  ry:  12, w: 220, h: 145, type: 'image' },
-    { dx:  4.1,  dy: -0.6,  dz: -0.5,  ry: -24, w: 210, h: 290, type: 'image' },
-    { dx: -1.8,  dy: -0.9,  dz:  0.35, ry:   0, w: 338, h: 411, type: 'info', res: 3 },
-  ];
-  let floatingCards = [];
-  let cardHitPlanes = [];
-
-  // ─────────────────────────────────────────────────────────────────
-  // POST-PROCESSING
-  // ─────────────────────────────────────────────────────────────────
-
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-
-  const bokehPass = new BokehPass(scene, camera, {
-    focus:   12.0,
-    aperture: 0.0015,
-    maxblur:  0.008
-  });
-  composer.addPass(bokehPass);
-  composer.addPass(new OutputPass());
-
-  // ─────────────────────────────────────────────────────────────────
-  // NODES
-  // ─────────────────────────────────────────────────────────────────
-
-  const nodeMap     = {};
-  const nodeMeshes  = [];
-  const ringMeshes  = [];
-
-  const nodeGeoN1    = new THREE.BoxGeometry(0.175, 0.175, 0.175);
-  const nodeGeoN2    = new THREE.SphereGeometry(0.09, 12, 8);
-  const COLOR_DEFAULT = new THREE.Color(0x444444);
-  const COLOR_N2      = new THREE.Color(0x666666);
-  const COLOR_ACTIVE  = new THREE.Color(0x111111);
-
-  let activeNodeMesh = null;
-
-  courants.forEach(c => {
-    const isN2 = c.niveau === 2;
-    const geo  = isN2 ? nodeGeoN2 : nodeGeoN1;
-    const mat  = new THREE.MeshBasicMaterial({ color: isN2 ? COLOR_N2.clone() : COLOR_DEFAULT.clone(), transparent: true, opacity: 0 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(c.position);
-    mesh.scale.setScalar(0);
-    mesh.userData = c;
-    scene.add(mesh);
-    nodeMap[c.id] = mesh;
-    nodeMeshes.push(mesh);
-
-    const rInner = isN2 ? 0.10 : 0.17;
-    const rOuter = isN2 ? 0.13 : 0.21;
-    const ringGeo = new THREE.RingGeometry(rInner, rOuter, 40);
-    const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x111111), transparent: true, opacity: 0, side: THREE.DoubleSide });
-    const ring    = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.copy(c.position);
-    scene.add(ring);
-    ringMeshes.push(ring);
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // EDGES
-  // ─────────────────────────────────────────────────────────────────
-
-  const edgeMeshes = [];
-  edges.forEach(e => {
-    const a = nodeMap[e.from];
-    const b = nodeMap[e.to];
-    if (!a || !b) return;
-    const isSubEdge = a.userData.niveau === 2 || b.userData.niveau === 2;
-    const mid = a.position.clone().lerp(b.position, 0.5)
-      .add(new THREE.Vector3((Math.random() - 0.5) * 1.8, (Math.random() - 0.5) * 1.2, 0));
-    const curve   = new THREE.QuadraticBezierCurve3(a.position, mid, b.position);
-    const tubeGeo = new THREE.TubeGeometry(curve, 24, isSubEdge ? 0.006 : 0.012, 6, false);
-    const targetOpacity = isSubEdge ? 0.25 : 0.5;
-    const tubeMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0 });
-    const edgeMesh = new THREE.Mesh(tubeGeo, tubeMat);
-    edgeMesh.userData.targetOpacity = targetOpacity;
-    scene.add(edgeMesh);
-    edgeMeshes.push(edgeMesh);
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // PARTICLES
-  // ─────────────────────────────────────────────────────────────────
-
-  const pCount = 8000;
-  const pPos   = new Float32Array(pCount * 3);
-  for (let i = 0; i < pCount; i++) {
-    pPos[i * 3]     = (Math.random() - 0.5) * 100;
-    pPos[i * 3 + 1] = (Math.random() - 0.5) * 70;
-    pPos[i * 3 + 2] = (Math.random() - 0.5) * 100;
-  }
-
-  const pGeo = new THREE.BufferGeometry();
-  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-  const pMat = new THREE.PointsMaterial({
-    color: 0x555555,
-    size: 0.09,
-    transparent: true,
-    opacity: 0,
-    sizeAttenuation: true
-  });
-  scene.add(new THREE.Points(pGeo, pMat));
-
-  // ─────────────────────────────────────────────────────────────────
   // LABELS
   // ─────────────────────────────────────────────────────────────────
 
   const labelContainer = document.getElementById('labels');
-  const labelEls = [];
+  labelEls = [];
 
   courants.forEach(c => {
     const el = document.createElement('div');
@@ -442,7 +430,7 @@
   // NAV DOTS
   // ─────────────────────────────────────────────────────────────────
 
-  const navDotsEl = document.getElementById('nav-dots');
+  navDotsEl = document.getElementById('nav-dots');
   courants.forEach((c, i) => {
     const dot = document.createElement('div');
     dot.className = 'nav-dot';
@@ -452,6 +440,7 @@
   });
 
   function updateNavDots() {
+    if (!navDotsEl) return;
     let closest = 0, minD = Infinity;
     courants.forEach((c, i) => {
       const d = camera.position.distanceTo(c.position);
@@ -483,7 +472,7 @@
     tlYearsEl.appendChild(el);
   });
 
-  const tlDotMap = {};
+  tlDotMap = {};
   courants.forEach(c => {
     const year = c.periode ? parseInt(c.periode.match(/(\d{4})/)?.[1]) : null;
     if (!year) return;
@@ -510,72 +499,49 @@
       el.className = 'float-card';
       el.style.width  = off.w + 'px';
 
-      if (off.type === 'info') {
-        el.style.pointerEvents = 'auto';
-        const fic = document.createElement('div');
-        fic.className = 'float-info-card';
-        fic.style.borderLeftColor = c.couleur;
-        const artistesHtml = (c.artistes?.length)
-          ? `<div class="fic-label">Artistes</div><div class="fic-artistes">${c.artistes.map(a => `<div>${a}</div>`).join('')}</div>`
-          : '';
-        const principesHtml = c.principes
-          ? `<div class="fic-label">Principes</div><div class="fic-principes">${c.principes}</div>`
-          : '';
-        fic.innerHTML = `
-          <div class="fic-periode">${c.periode || ''}</div>
-          <div class="fic-nom" style="font-family:${c.typographie};color:${c.couleur}">${c.nom}</div>
-          <div class="fic-bar" style="background:${c.couleur}"></div>
-          <div class="fic-desc">${c.description || ''}</div>
-          ${artistesHtml}${principesHtml}
-        `;
-        el.appendChild(fic);
+      const src = imgs[i] || null;
+      // Clics gérés via hit planes THREE.js (voir cardHitPlanes) — plus fiable que CSS3D hit-testing
+      el.style.pointerEvents = 'none';
+      if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        el.appendChild(img);
       } else {
-        const src = imgs[i] || null;
-        // Clics gérés via hit planes THREE.js (voir cardHitPlanes) — plus fiable que CSS3D hit-testing
-        el.style.pointerEvents = 'none';
-        if (src) {
-          const img = document.createElement('img');
-          img.src = src;
-          el.appendChild(img);
-        } else {
-          el.style.height = off.h + 'px';
-          const inner = document.createElement('div');
-          inner.className = 'float-card-inner';
-          inner.style.background = `linear-gradient(135deg, ${c.couleur}22 0%, ${c.couleur}07 100%)`;
-          inner.style.border     = `1px solid ${c.couleur}30`;
-          inner.style.width      = '100%';
-          inner.style.height     = '100%';
-          const lbl = document.createElement('span');
-          lbl.style.cssText = `font-family:${c.typographie};font-size:${8+i}px;letter-spacing:0.45em;text-transform:uppercase;color:${c.couleur};opacity:0.35`;
-          lbl.textContent = c.nom;
-          inner.appendChild(lbl);
-          el.appendChild(inner);
-        }
+        el.style.height = off.h + 'px';
+        const inner = document.createElement('div');
+        inner.className = 'float-card-inner';
+        inner.style.background = `linear-gradient(135deg, ${c.couleur}22 0%, ${c.couleur}07 100%)`;
+        inner.style.border     = `1px solid ${c.couleur}30`;
+        inner.style.width      = '100%';
+        inner.style.height     = '100%';
+        const lbl = document.createElement('span');
+        lbl.style.cssText = `font-family:${c.typographie};font-size:${8+i}px;letter-spacing:0.45em;text-transform:uppercase;color:${c.couleur};opacity:0.35`;
+        lbl.textContent = c.nom;
+        inner.appendChild(lbl);
+        el.appendChild(inner);
       }
 
       const obj = new CSS3DObject(el);
       obj.position.set(pos.x + off.dx, pos.y + off.dy, pos.z + off.dz);
-      obj.rotation.y    = off.type === 'info' ? camRy : camRy + off.ry * Math.PI / 180;
+      obj.rotation.y    = camRy + off.ry * Math.PI / 180;
       obj.scale.setScalar(CARD_SCALE / (off.res || 1));
       obj.userData.baseY = pos.y + off.dy;
       obj.userData.baseX = pos.x + off.dx;
       obj.userData.phase = i * 1.5;
-      obj.userData.ampY  = off.type === 'info' ? 0.025 : 0.06 + i * 0.015;
+      obj.userData.ampY  = 0.06 + i * 0.015;
       cssScene.add(obj);
       floatingCards.push(obj);
-      // Plan invisible THREE.js pour hit-testing fiable des image cards
-      if (off.type !== 'info') {
-        const planeGeo = new THREE.PlaneGeometry(off.w * CARD_SCALE, off.h * CARD_SCALE);
-        const planeMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
-        const plane = new THREE.Mesh(planeGeo, planeMat);
-        plane.position.copy(obj.position);
-        plane.rotation.y = obj.rotation.y;
-        plane.userData.cardImages = imgs;
-        plane.userData.cardIndex  = i;
-        plane.userData.floatRef   = obj;
-        scene.add(plane);
-        cardHitPlanes.push(plane);
-      }
+      // Plan invisible THREE.js pour hit-testing fiable
+      const planeGeo = new THREE.PlaneGeometry(off.w * CARD_SCALE, off.h * CARD_SCALE);
+      const planeMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+      const plane = new THREE.Mesh(planeGeo, planeMat);
+      plane.position.copy(obj.position);
+      plane.rotation.y = obj.rotation.y;
+      plane.userData.cardImages = imgs;
+      plane.userData.cardIndex  = i;
+      plane.userData.floatRef   = obj;
+      scene.add(plane);
+      cardHitPlanes.push(plane);
       setTimeout(() => el.classList.add('visible'), 480 + i * 54);
     });
   }
@@ -588,16 +554,133 @@
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // NAVIGATION
+  // INFO PANEL 2D
   // ─────────────────────────────────────────────────────────────────
 
-  // Smooth orbit target + camera zoom
-  const lerpCameraPos = new THREE.Vector3(4, 3, 14);
-  let isZooming = false;
+  const tlTabEl         = document.getElementById('tl-tab');
+  const tlTabYearEl     = document.getElementById('tl-tab-year');
+  const tlTabNomEl      = document.getElementById('tl-tab-nom');
+  const tooltipEl       = document.getElementById('tl-tooltip');
+  const tooltipScrollEl = document.getElementById('tl-tooltip-scroll');
+  const tooltipCloseEl  = document.getElementById('tl-tooltip-close');
+  let   currentPanelSlug = null;
+  let   currentCourant   = null;
+
+  function openInfoPanel(slug, c) {
+    currentPanelSlug     = slug;
+    currentCourant       = c;
+    tooltipEl.classList.remove('open');
+    tlTabYearEl.textContent = c?.periode || '';
+    tlTabNomEl.textContent  = c?.nom     || '';
+    const col = c?.couleur || null;
+    tlTabEl.style.borderColor      = col ? col : '';
+    tlTabEl.style.backgroundColor  = col ? col : '';
+    tlTabEl.style.color            = col ? '#fff' : '';
+    tlTabEl.classList.add('visible');
+  }
+
+  function positionTooltip() {
+    const tlEl      = document.getElementById('timeline');
+    const markerEl  = document.getElementById('timeline-marker');
+    const tlRect    = tlEl.getBoundingClientRect();
+    const markerPct = parseFloat(markerEl.style.left) / 100 || 0.5;
+    const markerX   = tlRect.left + tlRect.width * markerPct;
+    const tipW      = Math.min(650, window.innerWidth - 32);
+    const tipLeft   = Math.max(16, Math.min(markerX - tipW / 2, window.innerWidth - tipW - 16));
+    tooltipEl.style.left  = tipLeft + 'px';
+    tooltipEl.style.width = tipW + 'px';
+  }
+
+  function openTooltip() {
+    if (!currentPanelSlug || !currentCourant) return;
+    positionTooltip();
+    tooltipScrollEl.innerHTML = `
+      <div class="ip-skel ip-skel-short"></div>
+      <div class="ip-skel ip-skel-title"></div>
+      <div class="ip-skel ip-skel-bar"></div>
+      <div class="ip-skel ip-skel-text"></div>
+      <div class="ip-skel ip-skel-text w85"></div>
+      <div class="ip-skel ip-skel-text"></div>
+      <div class="ip-skel ip-skel-text w70"></div>
+    `;
+    tooltipEl.classList.add('open');
+    const col = currentCourant?.couleur || null;
+    const inner = document.getElementById('tl-tooltip-inner');
+    if (inner) inner.style.borderColor = col ? col : '';
+    if (inner) inner.style.boxShadow   = col ? `0 8px 40px ${col}33` : '0 8px 40px rgba(0,0,0,0.12)';
+    const slug = currentPanelSlug;
+    const c    = currentCourant;
+    fetch(`api/courants.php?slug=${encodeURIComponent(slug)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (currentPanelSlug !== slug) return;
+        renderInfoPanel(data, c);
+      })
+      .catch(() => { if (currentPanelSlug === slug) renderInfoPanel(null, c); });
+  }
+
+  function renderInfoPanel(data, c) {
+    const desc      = data?.description_longue || data?.description_courte || c?.description || '';
+    const artistes  = (data?.artistes?.length ? data.artistes : null) || c?.artistes || [];
+    const keypoints = data?.key_points || c?.principes || '';
+    const mots_cles = data?.mots_cles || c?.mots_cles || [];
+    const wikiUrl   = data?.wikipedia_url || null;
+    const couleur   = c?.couleur || '#888';
+    const typo      = c?.typographie || 'inherit';
+
+    const artistesHtml = artistes.length ? `
+      <div class="ip-section-label">Artistes</div>
+      <ul id="ip-artistes">
+        ${artistes.map(a => {
+          const nom   = typeof a === 'string' ? a : (a.nom || a);
+          const dates = a.naissance ? `${a.naissance}${a.deces ? ` – ${a.deces}` : ''}` : '';
+          const nat   = a.nationalite ? ` · ${a.nationalite}` : '';
+          const url   = a.wikipedia_url || null;
+          const inner = `<span class="ip-artiste-nom">${nom}</span><span class="ip-artiste-meta">${dates}${nat}</span>`;
+          return `<li>${url
+            ? `<a class="ip-artiste" href="${url}" target="_blank" rel="noopener">${inner}</a>`
+            : `<div class="ip-artiste">${inner}</div>`
+          }</li>`;
+        }).join('')}
+      </ul>` : '';
+
+    const keypointsHtml = keypoints
+      ? `<div class="ip-section-label">Principes</div><div id="ip-keypoints">${keypoints}</div>` : '';
+
+    const tagsHtml = mots_cles.length
+      ? `<div id="ip-tags">${mots_cles.map(t => `<span class="ip-tag" style="color:${couleur}">${t}</span>`).join('')}</div>` : '';
+
+    const wikiHtml = wikiUrl
+      ? `<a id="ip-wiki" href="${wikiUrl}" target="_blank" rel="noopener">↗ Wikipedia</a>` : '';
+
+    tooltipScrollEl.innerHTML = `
+      <div id="ip-periode">${c?.periode || ''}</div>
+      <div id="ip-nom" style="font-family:${typo};color:${couleur}">${c?.nom || ''}</div>
+      <div id="ip-bar" style="background:${couleur}"></div>
+      <div id="ip-desc">${desc}</div>
+      ${wikiHtml}
+      ${artistesHtml}
+      ${keypointsHtml}
+      ${tagsHtml}
+    `;
+    tooltipScrollEl.scrollTop = 0;
+  }
+
+  function closeInfoPanel() {
+    tlTabEl.classList.remove('visible');
+    tooltipEl.classList.remove('open');
+    currentPanelSlug = null;
+    currentCourant   = null;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // NAVIGATION
+  // ─────────────────────────────────────────────────────────────────
 
   const bgTypoSpan = document.querySelector('#bg-typo span');
 
   function navigateTo(c, mesh) {
+    if (camTransition || isZooming) return;
     lerpTarget.copy(c.position);
 
     // Typo monumentale
@@ -652,8 +735,10 @@
     const approachDist = 5.5;
     lerpCameraPos.copy(c.position).addScaledVector(finalDir, approachDist);
     isZooming = true;
+    controls.enabled = false;
     pendingCardCourant = c; // cartes spawnées une fois la caméra arrivée
     clearFloatingCards();   // vider immédiatement les cartes de la sélection précédente
+    openInfoPanel(c.id, c);
 
     // ERA AUDIO
     if (audioStarted && !audioMuted) {
@@ -672,30 +757,35 @@
   let   cursorX = 0, cursorY = 0;
 
   // Curseur personnalisé
+  let _rayPending = false;
   window.addEventListener('mousemove', e => {
     cursorX = e.clientX;
     cursorY = e.clientY;
     cursorEl.style.left = cursorX + 'px';
     cursorEl.style.top  = cursorY + 'px';
-
     mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const hits = raycaster.intersectObjects(nodeMeshes);
-    if (hits.length > 0) {
-      const col = hits[0].object.userData.couleur || '#111';
-      cursorEl.style.width       = '16px';
-      cursorEl.style.height      = '16px';
-      cursorEl.style.background  = col;
-      cursorEl.style.borderColor = col;
-      cursorEl.style.opacity     = '0.85';
-    } else {
-      cursorEl.style.width       = '10px';
-      cursorEl.style.height      = '10px';
-      cursorEl.style.background  = 'transparent';
-      cursorEl.style.borderColor = document.documentElement.dataset.theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)';
-      cursorEl.style.opacity     = '1';
-    }
+    if (_rayPending) return;
+    _rayPending = true;
+    requestAnimationFrame(() => {
+      _rayPending = false;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(nodeMeshes);
+      if (hits.length > 0) {
+        const col = hits[0].object.userData.couleur || '#111';
+        cursorEl.style.width       = '16px';
+        cursorEl.style.height      = '16px';
+        cursorEl.style.background  = col;
+        cursorEl.style.borderColor = col;
+        cursorEl.style.opacity     = '0.85';
+      } else {
+        cursorEl.style.width       = '10px';
+        cursorEl.style.height      = '10px';
+        cursorEl.style.background  = 'transparent';
+        cursorEl.style.borderColor = document.documentElement.dataset.theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)';
+        cursorEl.style.opacity     = '1';
+      }
+    });
   });
 
   function addStopAutoRotate() {
@@ -716,8 +806,9 @@
 
   window.addEventListener('click', e => {
     // Ignorer les clics sur les éléments UI (boutons, timeline, nav-dots)
-    if (e.target.closest('#btn-mute, #btn-theme, #timeline, #nav-dots, #lightbox, #ls')) return;
+    if (e.target.closest('#btn-mute, #btn-theme, #timeline, #nav-dots, #lightbox, #ls, #tl-tooltip')) return;
     if (pointerMoved) return;
+    if (camTransition || isZooming) return;
     mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
@@ -742,6 +833,7 @@
 
   function deselect() {
     clearFloatingCards();
+    closeInfoPanel();
     pendingCardCourant = null;
     stopEraAudio();
     if (activeNodeMesh) {
@@ -758,6 +850,7 @@
 
   function resetView() {
     clearFloatingCards();
+    closeInfoPanel();
     stopEraAudio();
     if (activeNodeMesh) {
       const isN2 = activeNodeMesh.userData.niveau === 2;
@@ -769,6 +862,7 @@
     lerpTarget.set(0, 0, -9.75);
     lerpCameraPos.set(6.75, 5.25, 24.75);
     isZooming = true;
+    controls.enabled = false;
     controls.autoRotate = true;
     addStopAutoRotate();
     bgTypoSpan.style.opacity = '0';
@@ -779,6 +873,7 @@
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (lightboxEl.classList.contains('active')) { closeLightbox(); return; }
+      if (tooltipEl.classList.contains('open')) { tooltipEl.classList.remove('open'); return; }
       deselect();
     }
     if (lightboxEl.classList.contains('active')) {
@@ -822,6 +917,9 @@
 
   lbClose.addEventListener('click', closeLightbox);
   lightboxEl.addEventListener('click', e => { if (e.target === lightboxEl) closeLightbox(); });
+
+  tlTabEl.addEventListener('click', openTooltip);
+  tooltipCloseEl.addEventListener('click', () => tooltipEl.classList.remove('open'));
   lbPrev.addEventListener('click', e => {
     e.stopPropagation();
     lbIndex = (lbIndex - 1 + lbImages.length) % lbImages.length;
@@ -846,7 +944,7 @@
     const t = isDark ? THEME.dark : THEME.light;
     document.documentElement.dataset.theme = isDark ? 'dark' : '';
     scene.background.set(t.bg);
-    scene.fog.color.set(t.fog);
+    if (scene.fog) scene.fog.color.set(t.fog);
     COLOR_DEFAULT.set(t.node);
     COLOR_N2.set(t.nodeN2);
     nodeMeshes.forEach(mesh => {
@@ -911,18 +1009,14 @@
   // ─────────────────────────────────────────────────────────────────
 
   const ERA_BUCKETS = [
-    { from: 1850, to: 1900, file: 'sounds/1880.wav'  },
-    { from: 1900, to: 1910, file: 'sounds/1900.mp3'  },
-    { from: 1910, to: 1920, file: 'sounds/1910.mp3'  },
-    { from: 1920, to: 1940, file: 'sounds/1930.wav'  }, // pas de fichier 1920
-    { from: 1940, to: 1950, file: 'sounds/1940.mp3'  },
-    { from: 1950, to: 1960, file: 'sounds/1950.mp3'  },
-    { from: 1960, to: 1970, file: 'sounds/1960.mp3'  },
-    { from: 1970, to: 1980, file: 'sounds/1970.mp3'  },
-    { from: 1980, to: 1990, file: 'sounds/1980.wav'  },
-    { from: 1990, to: 2000, file: 'sounds/1990.wav'  },
-    { from: 2000, to: 2010, file: 'sounds/2000.mp3'  },
-    { from: 2010, to: 2030, file: 'sounds/2010.wav'  },
+    { from:    0, to: 1880, file: 'sounds/1800.mp3' }, // < 1880 : romantique tardif
+    { from: 1880, to: 1910, file: 'sounds/1880.mp3' }, // impressionnisme
+    { from: 1910, to: 1930, file: 'sounds/1910.mp3' }, // jazz primitif
+    { from: 1930, to: 1950, file: 'sounds/1930.mp3' }, // swing
+    { from: 1950, to: 1975, file: 'sounds/1950.mp3' }, // électronique expérimentale
+    { from: 1975, to: 1995, file: 'sounds/1975.mp3' }, // synthés / new wave
+    { from: 1995, to: 2010, file: 'sounds/1995.mp3' }, // electronica ambient
+    { from: 2010, to: 2100, file: 'sounds/2010.mp3' }, // nappes numériques
   ];
 
   let eraSource      = null;
@@ -986,82 +1080,24 @@
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // INTRO ANIMATION
-  // ─────────────────────────────────────────────────────────────────
-
-  let introActive = false;
-  const INTRO_DURATION     = 2.8;
-  const INTRO_NODE_STAGGER = 1.6; // fenêtre totale de stagger des nœuds
-
-  let pendingCardCourant = null; // courant en attente d'affichage de cartes
-
-  // Masquer l'UI pendant l'intro
-  document.getElementById('title').style.opacity    = '0';
-  document.getElementById('hint').style.opacity     = '0';
-  document.getElementById('timeline').style.opacity = '0';
-
-  function tickIntro(elapsed) {
-    // Nœuds : apparition staggerée
-    courants.forEach((c, i) => {
-      const mesh      = nodeMap[c.id];
-      const nodeStart = 0.1 + (i / courants.length) * INTRO_NODE_STAGGER;
-      const delta     = elapsed - nodeStart;
-      if (delta <= 0) return;
-      const p = Math.min(1, delta / 0.45);
-      mesh.material.opacity = p;
-      mesh.scale.setScalar(p < 1 ? 0.4 + p * 0.6 : 1);
-    });
-
-    // Arêtes : fade in global
-    const edgeP = Math.min(1, Math.max(0, (elapsed - 0.8) / 1.2));
-    edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity * edgeP; });
-
-    // Particules
-    pMat.opacity = 0.8 * Math.min(1, Math.max(0, (elapsed - 0.6) / 1.5));
-
-    // Fin de l'intro
-    if (elapsed >= INTRO_DURATION) {
-      introActive = false;
-      courants.forEach(c => {
-        nodeMap[c.id].material.opacity = 1;
-        nodeMap[c.id].scale.setScalar(1);
-      });
-      edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity; });
-      pMat.opacity = 0.8;
-      const titleEl    = document.getElementById('title');
-      const hintEl     = document.getElementById('hint');
-      const timelineEl = document.getElementById('timeline');
-      titleEl.style.transition    = 'opacity 1s ease';
-      hintEl.style.transition     = 'opacity 1s ease 0.4s';
-      timelineEl.style.transition = 'opacity 1s ease 0.6s';
-      titleEl.style.opacity    = '1';
-      hintEl.style.opacity     = '1';
-      timelineEl.style.opacity = '1';
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────
   // ANIMATE
   // ─────────────────────────────────────────────────────────────────
 
-  const clock = new THREE.Clock();
-
   function animate() {
     requestAnimationFrame(animate);
+    _frame++;
     const t = clock.getElapsedTime();
 
-    if (introActive) tickIntro(t);
-
-    // Mise à jour focus Bokeh selon distance au nœud actif
     if (activeNodeMesh) {
       const dist = camera.position.distanceTo(activeNodeMesh.position);
       bokehPass.uniforms['focus'].value += (dist - bokehPass.uniforms['focus'].value) * 0.05;
     }
     // Zoom vers le noeud actif — cartes spawnées à l'arrivée
     if (isZooming) {
-      camera.position.lerp(lerpCameraPos, 0.03);
+      camera.position.lerp(lerpCameraPos, 0.05);
       if (camera.position.distanceTo(lerpCameraPos) < 0.25) {
         isZooming = false;
+        controls.enabled = true;
         if (pendingCardCourant) {
           spawnFloatingCards(pendingCardCourant);
           pendingCardCourant = null;
@@ -1069,24 +1105,48 @@
       }
     }
 
-    // Smooth orbit target
-    controls.target.lerp(lerpTarget, 0.05);
-    controls.update();
-
-    // Face rings toward camera
+    // Transition caméra post-loading
+    if (camTransition) {
+      const elapsed  = t - camTransitionStart;
+      const progress = Math.min(1, elapsed / CAM_TRANS_DUR);
+      const eased    = 1 - Math.pow(1 - progress, 3);
+      camera.position.lerpVectors(CAM_START, CAM_END, eased);
+      const lookNow = new THREE.Vector3().lerpVectors(CAM_LOOK_START, controls.target, eased);
+      camera.lookAt(lookNow);
+      const edgeP = Math.min(1, Math.max(0, (progress - 0.1) / 0.7));
+      edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity * edgeP; });
+      pMat.opacity = 0.8 * Math.min(1, Math.max(0, (progress - 0.2) / 0.6));
+      // Bokeh : focus suit la distance + aperture monte progressivement
+      const _focusDist = camera.position.distanceTo(CAM_LOOK_START);
+      bokehPass.uniforms['focus'].value += (_focusDist - bokehPass.uniforms['focus'].value) * 0.08;
+      bokehPass.uniforms['aperture'].value = 0.0003 + eased * 0.0012;
+      if (progress >= 1) {
+        camTransition = false;
+        nodeMeshes.forEach(m => {
+          if (m !== activeNodeMesh) m.material.color.set(m.userData.niveau === 2 ? COLOR_N2 : COLOR_DEFAULT);
+          m.material.opacity = 1;
+        });
+        edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity; });
+        pMat.opacity = 0.8;
+        scene.fog = new THREE.FogExp2(_isDark ? 0x000000 : 0xffffff, 0.0093);
+        controls.enabled = true; controls.autoRotate = true; controls.update();
+      }
+    } else {
+      // Smooth orbit target
+      controls.target.lerp(lerpTarget, 0.05);
+      controls.update();
+    }
     ringMeshes.forEach(r => r.lookAt(camera.position));
 
     // Pulse uniquement sur le noeud actif (hors intro)
-    if (!introActive) {
-      nodeMeshes.forEach((m, i) => {
+    nodeMeshes.forEach((m, i) => {
         if (m === activeNodeMesh) {
           const s = 1 + 0.1 * Math.sin(t * 2 + i * 0.9);
           m.scale.setScalar(s);
         } else {
           m.scale.setScalar(1);
-        }
-      });
-    }
+      }
+    });
 
     // Float cards idle animation
     floatingCards.forEach(obj => {
@@ -1099,17 +1159,24 @@
       if (ref) { plane.position.x = ref.position.x; plane.position.y = ref.position.y; }
     });
 
-    updateLabels();
-    updateNavDots();
+    if (_frame % 2 === 0) updateLabels();
+    if (_frame % 6 === 0) updateNavDots();
     composer.render();
     cssRenderer.render(cssScene, camera);
   }
 
-  // Démarrer la scène 3D après le loading screen
   hideLoadingScreen(() => {
-    clock.start(); // reset le clock pour que l'intro parte de 0
-    introActive = true;
-    animate();
+    camTransition = true;
+    camTransitionStart = clock.getElapsedTime();
+    setTimeout(() => {
+      const titleEl    = document.getElementById('title');
+      const hintEl     = document.getElementById('hint');
+      const timelineEl = document.getElementById('timeline');
+      titleEl.style.transition    = 'opacity 1.2s ease';
+      hintEl.style.transition     = 'opacity 1.2s ease 0.3s';
+      timelineEl.style.transition = 'opacity 1.2s ease 0.5s';
+      titleEl.style.opacity = '1'; hintEl.style.opacity = '1'; timelineEl.style.opacity = '1';
+    }, 500);
   });
 
   // ─────────────────────────────────────────────────────────────────

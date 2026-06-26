@@ -40,7 +40,7 @@ function get_all_courants(PDO $pdo): array {
             id, slug, nom, wikidata_id,
             description_courte,
             periode_debut, periode_fin,
-            image_wikidata, image_wikipedia, image_3, image_4, image_5,
+            image_wikidata, image_wikipedia, image_3, image_4, image_5, image_6,
             artistes, key_points,
             couleur_accent, typographie,
             mots_cles,
@@ -87,6 +87,7 @@ function get_all_courants(PDO $pdo): array {
                 $row['image_3'] ?? null,
                 $row['image_4'] ?? null,
                 $row['image_5'] ?? null,
+                $row['image_6'] ?? null,
             ])),
             'da'                 => [
                 'couleur'    => $row['couleur_accent'],
@@ -125,7 +126,8 @@ function get_courant(PDO $pdo, string $slug): array {
 
     // Artistes associés
     $artistes = $pdo->prepare(<<<SQL
-        SELECT a.nom, a.naissance, a.deces, a.nationalite, a.bio_courte, a.image
+        SELECT a.nom, a.naissance, a.deces, a.nationalite, a.bio_courte, a.image,
+               a.wikidata_id, a.wikipedia_en
         FROM artistes a
         JOIN courant_artistes ca ON ca.artiste_id = a.id
         WHERE ca.courant_id = :id
@@ -179,8 +181,17 @@ function get_courant(PDO $pdo, string $slug): array {
             'y' => (float)$row['pos_y'],
             'z' => (float)$row['pos_z'],
         ],
-        'artistes'           => $artistes->fetchAll(),
+        'artistes'           => array_map(function($a) {
+            $wiki_en = $a['wikipedia_en'] ?? null;
+            $a['wikipedia_url'] = $wiki_en
+                ? 'https://en.wikipedia.org/wiki/' . str_replace(' ', '_', $wiki_en)
+                : null;
+            return $a;
+        }, $artistes->fetchAll()),
         'relations'          => $relations->fetchAll(),
         'objets_visuels'     => $objets->fetchAll(),
+        'wikipedia_url'      => $row['wikipedia_titre']
+            ? 'https://en.wikipedia.org/wiki/' . str_replace(' ', '_', $row['wikipedia_titre'])
+            : null,
     ];
 }
