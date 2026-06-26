@@ -5,6 +5,26 @@
 
 ---
 
+## ⚠️ RÈGLES TECHNIQUES CRITIQUES — À ne jamais perdre dans un refactor
+
+Ces points ont causé des bugs majeurs par le passé. Les relire avant toute modification de `index.html`.
+
+| Règle | Détail |
+|---|---|
+| **Three.js init avant tout `await`** | `renderer`, `scene`, `camera`, `controls`, `composer`, `bokehPass` doivent être initialisés avant le premier fetch API |
+| **Un seul `animate()`** | Démarre tôt, itère des tableaux vides sans crash — jamais de second loop |
+| **`camera.up` intouchable** | Ne JAMAIS modifier `camera.up` — casse l'OrbitControls définitivement |
+| **`autoRotateSpeed = 0.25`** | Doit être dans le bloc init controls — à ne pas perdre dans un refactor |
+| **`controls.enabled = false` pendant zoom** | Bloque le drag OrbitControls pendant `isZooming` et `camTransition` |
+| **Hit-testing cartes** | Via `PlaneGeometry` THREE.js invisible coplanaire à chaque carte CSS3D — ne pas utiliser les événements CSS pour les clics sur les cartes |
+| **`db_now()` PHP uniquement** | Jamais `datetime('now')` ni `NOW()` en SQL direct |
+| **Positions constellation** | Formule actuelle : `z = 8 - (debut - 1880) × 0.2`, multiplicateurs X/Y ×2.4, Z ×2.1 — à connaître avant de toucher aux positions en Phase 1B |
+| **DB : 55 relations** | 22 courants niveau 1 + 15 niveau 2 = 37 nœuds, 55 edges en prod |
+| **Admin prod uniquement** | `admin.php` n'existe qu'en prod MySQL — pas de version locale. Éditer directement dans `deploy/admin.php` |
+| **sync.ps1** | Copie `index.html`, `style.css`, `api/courants.php`, `scraper/fetch_*.php` — ne touche pas `deploy/scraper/config.php` ni `deploy/admin.php` |
+
+---
+
 ## ✅ DÉCISIONS PRÉALABLES — Validées 2026-06-26
 
 - [x] **Langue** — **Anglais** (portée Awwwards maximale + LinkedIn global)

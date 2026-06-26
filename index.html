@@ -1,25 +1,32 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Atlas du Graphisme</title>
+  <title>Atlas of Graphic Design</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@300;400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <div id="ls">
-    <div id="ls-pct">0</div>
-    <div id="ls-label">%&nbsp;&nbsp;&nbsp;Chargement des styles</div>
-    <div id="ls-nom"></div>
+    <div id="ls-lines">
+      <p class="ls-line" id="ls-line-1">Design doesn't happen in a vacuum.</p>
+      <p class="ls-line" id="ls-line-2">37 movements. 150 years of visual history.</p>
+      <p class="ls-line" id="ls-line-3">Atlas of Graphic Design.</p>
+    </div>
+    <div id="ls-pct-wrap"><span id="ls-pct">0</span><span id="ls-pct-sym">%</span></div>
+    <button id="ls-enter">Enter</button>
   </div>
 
   <button id="btn-mute" title="Son ambiant">♫</button>
   <button id="btn-theme" title="Thème">&#9680;</button>
   <div id="cursor"></div>
   <div id="bg-typo"><span></span></div>
-  <div id="title">Atlas du Graphisme</div>
-  <div id="hint">Drag pour orbiter &nbsp;·&nbsp; Scroll pour zoomer &nbsp;·&nbsp; Clic pour explorer</div>
+  <div id="title">Atlas of Graphic Design</div>
+  <div id="hint">Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click to explore</div>
   <div id="nav-dots"></div>
   <div id="labels"></div>
   <div id="timeline">
@@ -134,27 +141,40 @@
 
   const lsEl    = document.getElementById('ls');
   const lsPctEl = document.getElementById('ls-pct');
-  const lsNomEl = document.getElementById('ls-nom');
-  let   lsProgress = 0;
+  let   lsProgress  = 0;
+  let   _lsSeqDone  = false;
+  let   _lsLoadDone = false;
+  let   _lsEnterCb  = null;
 
-  // Appliquer le thème mémorisé au loading screen immédiatement
-  if (localStorage.getItem('atlas-theme') === 'dark') lsEl.classList.add('dark');
+  // ── Séquence narrative — durée minimum 6s ──────────────────────
+  setTimeout(() => document.getElementById('ls-line-1').classList.add('visible'), 300);
+  setTimeout(() => document.getElementById('ls-line-2').classList.add('visible'), 1800);
+  setTimeout(() => document.getElementById('ls-line-3').classList.add('visible'), 3000);
+  setTimeout(() => { _lsSeqDone = true; _tryShowEnter(); }, 4000);
 
-  function setProgress(pct, nom) {
+  function _tryShowEnter() {
+    if (!_lsSeqDone || !_lsLoadDone) return;
+    const btn = document.getElementById('ls-enter');
+    btn.classList.add('visible');
+    btn.addEventListener('click', () => {
+      lsEl.classList.add('exiting');
+      setTimeout(() => {
+        lsEl.style.display = 'none';
+        if (_lsEnterCb) _lsEnterCb();
+      }, 700);
+    }, { once: true });
+  }
+
+  function setProgress(pct) {
     lsProgress = Math.min(100, Math.round(pct));
     lsPctEl.textContent = lsProgress;
-    if (nom !== undefined) {
-      lsNomEl.style.opacity = '0';
-      setTimeout(() => { lsNomEl.textContent = nom; lsNomEl.style.opacity = '1'; }, 250);
-    }
   }
 
   function hideLoadingScreen(onDone) {
     setProgress(100);
-    setTimeout(() => {
-      lsEl.classList.add('hidden');
-      setTimeout(() => { lsEl.style.display = 'none'; if (onDone) onDone(); }, 900);
-    }, 300);
+    _lsLoadDone = true;
+    _lsEnterCb  = onDone;
+    _tryShowEnter();
   }
 
   // ─── THREE.JS INIT — scène active pendant le loading, nœuds apparaissent au fur et à mesure ───
@@ -227,6 +247,7 @@
   const COLOR_N2      = new THREE.Color(0x666666);
   const COLOR_ACTIVE  = new THREE.Color(0x111111);
   let activeNodeMesh  = null;
+  let hoveredNodeMesh = null;
   let lerpCameraPos   = new THREE.Vector3(4, 3, 14);
   let isZooming       = false;
   let pendingCardCourant  = null;
@@ -333,6 +354,8 @@
     const tubeMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0 });
     const edgeMesh = new THREE.Mesh(tubeGeo, tubeMat);
     edgeMesh.userData.targetOpacity = isSubEdge ? 0.25 : 0.5;
+    edgeMesh.userData.fromId = e.from;
+    edgeMesh.userData.toId   = e.to;
     scene.add(edgeMesh);
     edgeMeshes.push(edgeMesh);
   });
@@ -356,7 +379,7 @@
     const done = () => {
       imgDone++;
       setProgress(20 + (imgDone / imgTotal) * 45, c.nom.toUpperCase());
-      nodeMap[c.id].material.color.set(c.couleur);
+      // couleur_accent non appliquée ici — noeuds restent COLOR_DEFAULT (noir) au repos
       nodeMap[c.id].material.opacity = 1;
       resolve();
     };
@@ -546,11 +569,23 @@
     });
   }
 
-  function clearFloatingCards() {
-    floatingCards.forEach(obj => cssScene.remove(obj));
-    floatingCards = [];
-    cardHitPlanes.forEach(m => scene.remove(m));
-    cardHitPlanes = [];
+  function clearFloatingCards(animate = false) {
+    if (animate && floatingCards.length > 0) {
+      const toRemoveCards  = [...floatingCards];
+      const toRemovePlanes = [...cardHitPlanes];
+      toRemoveCards.forEach(obj => { if (obj.element) obj.element.classList.remove('visible'); });
+      floatingCards  = [];
+      cardHitPlanes  = [];
+      setTimeout(() => {
+        toRemoveCards.forEach(obj => cssScene.remove(obj));
+        toRemovePlanes.forEach(m => scene.remove(m));
+      }, 420);
+    } else {
+      floatingCards.forEach(obj => cssScene.remove(obj));
+      floatingCards = [];
+      cardHitPlanes.forEach(m => scene.remove(m));
+      cardHitPlanes = [];
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -771,6 +806,8 @@
       _rayPending = false;
       raycaster.setFromCamera(mouse, camera);
       const hits = raycaster.intersectObjects(nodeMeshes);
+      const newHovered = hits.length > 0 ? hits[0].object : null;
+      if (newHovered !== hoveredNodeMesh) hoveredNodeMesh = newHovered;
       if (hits.length > 0) {
         const col = hits[0].object.userData.couleur || '#111';
         cursorEl.style.width       = '16px';
@@ -832,7 +869,7 @@
   });
 
   function deselect() {
-    clearFloatingCards();
+    clearFloatingCards(true);
     closeInfoPanel();
     pendingCardCourant = null;
     stopEraAudio();
@@ -849,7 +886,7 @@
   }
 
   function resetView() {
-    clearFloatingCards();
+    clearFloatingCards(true);
     closeInfoPanel();
     stopEraAudio();
     if (activeNodeMesh) {
@@ -1138,15 +1175,34 @@
     }
     ringMeshes.forEach(r => r.lookAt(camera.position));
 
-    // Pulse uniquement sur le noeud actif (hors intro)
+    // Hover + pulse + scale
     nodeMeshes.forEach((m, i) => {
-        if (m === activeNodeMesh) {
-          const s = 1 + 0.1 * Math.sin(t * 2 + i * 0.9);
-          m.scale.setScalar(s);
-        } else {
-          m.scale.setScalar(1);
+      if (m === activeNodeMesh) {
+        // Noeud actif : pulse
+        const s = 1 + 0.1 * Math.sin(t * 2 + i * 0.9);
+        m.scale.setScalar(s);
+      } else {
+        // Hover : scale lerp vers 1.4, couleur accent révélée
+        const isHovered = m === hoveredNodeMesh;
+        const targetScale = isHovered ? 1.4 : 1.0;
+        m.scale.setScalar(m.scale.x + (targetScale - m.scale.x) * 0.14);
+        if (!camTransition) {
+          m.material.color.set(
+            isHovered ? (m.userData.couleur || COLOR_DEFAULT)
+                      : (m.userData.niveau === 2 ? COLOR_N2 : COLOR_DEFAULT)
+          );
+        }
       }
     });
+    // Edge highlight au hover
+    if (!camTransition) {
+      edgeMeshes.forEach(m => {
+        const hovId = hoveredNodeMesh ? hoveredNodeMesh.userData.id : null;
+        const isConnected = hovId && (m.userData.fromId === hovId || m.userData.toId === hovId);
+        const targetOp = isConnected ? Math.min(1, m.userData.targetOpacity * 3) : m.userData.targetOpacity;
+        m.material.opacity += (targetOp - m.material.opacity) * 0.15;
+      });
+    }
 
     // Float cards idle animation
     floatingCards.forEach(obj => {
