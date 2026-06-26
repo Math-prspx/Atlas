@@ -176,6 +176,8 @@ function get_courant(PDO $pdo, string $slug): array {
         ],
         'artistes'           => $row['artistes'] ? json_decode($row['artistes'], true) : [],
         'key_points'         => $row['key_points'] ?? '',
+        'citation'           => $row['citation'] ?? null,
+        'citation_auteur'    => $row['citation_auteur'] ?? null,
         'mots_cles'          => $row['mots_cles']         ? json_decode($row['mots_cles'], true) : [],
         'principes_visuels'  => $row['principes_visuels'],
         'position'           => [
