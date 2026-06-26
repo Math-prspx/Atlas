@@ -24,6 +24,7 @@
   <button id="btn-mute" title="Son ambiant">♫</button>
   <button id="btn-theme" title="Thème">&#9680;</button>
   <div id="cursor"></div>
+  <div id="hover-tip"></div>
   <div id="bg-typo"><span></span></div>
   <div id="title">Atlas of Graphic Design</div>
   <div id="hint">Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Click to explore</div>
@@ -789,6 +790,7 @@
   const raycaster    = new THREE.Raycaster();
   const mouse        = new THREE.Vector2();
   const cursorEl     = document.getElementById('cursor');
+  const hoverTipEl   = document.getElementById('hover-tip');
   let   cursorX = 0, cursorY = 0;
 
   // Curseur personnalisé
@@ -798,6 +800,10 @@
     cursorY = e.clientY;
     cursorEl.style.left = cursorX + 'px';
     cursorEl.style.top  = cursorY + 'px';
+    if (hoveredNodeMesh) {
+      hoverTipEl.style.left = (cursorX + 20) + 'px';
+      hoverTipEl.style.top  = (cursorY + 16) + 'px';
+    }
     mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     if (_rayPending) return;
@@ -810,17 +816,21 @@
       if (newHovered !== hoveredNodeMesh) hoveredNodeMesh = newHovered;
       if (hits.length > 0) {
         const col = hits[0].object.userData.couleur || '#111';
+        const c   = hits[0].object.userData;
         cursorEl.style.width       = '16px';
         cursorEl.style.height      = '16px';
         cursorEl.style.background  = col;
         cursorEl.style.borderColor = col;
         cursorEl.style.opacity     = '0.85';
+        hoverTipEl.textContent = c.periode ? `${c.nom}  ·  ${c.periode}` : c.nom;
+        hoverTipEl.classList.add('visible');
       } else {
         cursorEl.style.width       = '10px';
         cursorEl.style.height      = '10px';
         cursorEl.style.background  = 'transparent';
         cursorEl.style.borderColor = document.documentElement.dataset.theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)';
         cursorEl.style.opacity     = '1';
+        hoverTipEl.classList.remove('visible');
       }
     });
   });

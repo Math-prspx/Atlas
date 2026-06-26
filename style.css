@@ -134,7 +134,23 @@ canvas { display: block; cursor: none; }
 }
 #btn-theme:hover { opacity: 0.75; transform: scale(1.15); }
 
-/* ── CURSEUR ── */
+/* ── CURSEUR + HOVER TOOLTIP ── */
+#hover-tip {
+  position: fixed;
+  z-index: 9998;
+  pointer-events: none;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--fg-mid);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  user-select: none;
+}
+#hover-tip.visible { opacity: 1; }
+
 #cursor {
   position: fixed;
   width: 10px;
