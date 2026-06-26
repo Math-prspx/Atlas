@@ -670,6 +670,29 @@ canvas { display: block; cursor: none; }
   margin-bottom: 16px;
 }
 
+#ip-citation {
+  border-left: 2px solid var(--fg-faint);
+  padding: 10px 0 10px 14px;
+  margin: 4px 0 20px;
+}
+#ip-citation p {
+  font-family: 'Syne', sans-serif;
+  font-size: 11.5px;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.6;
+  color: var(--fg-hi);
+  margin-bottom: 6px;
+}
+#ip-citation cite {
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--fg-lo);
+  font-style: normal;
+}
+
 #ip-wiki {
   display: inline-flex;
   align-items: center;

@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS `courants` (
   -- Données éditoriales
   `artistes`          TEXT         DEFAULT NULL COMMENT 'JSON array des artistes représentatifs',
   `key_points`        TEXT         DEFAULT NULL COMMENT 'Description des principes visuels clés',
+  `citation`          TEXT         DEFAULT NULL COMMENT 'Citation emblématique (angle graphic design)',
+  `citation_auteur`   VARCHAR(200) DEFAULT NULL COMMENT 'Auteur de la citation',
 
   -- DA éditorial (valeurs manuelles)
   `couleur_accent`    VARCHAR(7)   DEFAULT '#888888' COMMENT 'Hex color ex: #e63946',

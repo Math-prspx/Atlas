@@ -656,7 +656,9 @@
   }
 
   function renderInfoPanel(data, c) {
-    const desc      = data?.description_longue || data?.description_courte || c?.description || '';
+    const desc           = data?.description_longue || data?.description_courte || c?.description || '';
+    const citation       = data?.citation       || c?.citation       || null;
+    const citationAuteur = data?.citation_auteur || c?.citation_auteur || null;
     const artistes  = (data?.artistes?.length ? data.artistes : null) || c?.artistes || [];
     const keypoints = data?.key_points || c?.principes || '';
     const mots_cles = data?.mots_cles || c?.mots_cles || [];
@@ -689,11 +691,15 @@
     const wikiHtml = wikiUrl
       ? `<a id="ip-wiki" href="${wikiUrl}" target="_blank" rel="noopener">↗ Wikipedia</a>` : '';
 
+    const citationHtml = citation
+      ? `<blockquote id="ip-citation"><p>&#8220;${citation}&#8221;</p><cite>&#8212; ${citationAuteur || ''}</cite></blockquote>` : '';
+
     tooltipScrollEl.innerHTML = `
       <div id="ip-periode">${c?.periode || ''}</div>
       <div id="ip-nom" style="font-family:${typo};color:${couleur}">${c?.nom || ''}</div>
       <div id="ip-bar" style="background:${couleur}"></div>
       <div id="ip-desc">${desc}</div>
+      ${citationHtml}
       ${wikiHtml}
       ${artistesHtml}
       ${keypointsHtml}

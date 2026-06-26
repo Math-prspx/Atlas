@@ -41,7 +41,7 @@ function get_all_courants(PDO $pdo): array {
             description_courte,
             periode_debut, periode_fin,
             image_wikidata, image_wikipedia, image_3, image_4, image_5, image_6,
-            artistes, key_points,
+            artistes, key_points, citation, citation_auteur,
             couleur_accent, typographie,
             mots_cles,
             pos_x, pos_y, pos_z, niveau
@@ -95,6 +95,8 @@ function get_all_courants(PDO $pdo): array {
             ],
             'artistes'           => $row['artistes'] ? json_decode($row['artistes'], true) : [],
             'key_points'         => $row['key_points'] ?? '',
+            'citation'           => $row['citation'] ?? null,
+            'citation_auteur'    => $row['citation_auteur'] ?? null,
             'mots_cles'          => $row['mots_cles'] ? json_decode($row['mots_cles'], true) : [],
             'position'           => [
                 'x' => (float)$row['pos_x'],
