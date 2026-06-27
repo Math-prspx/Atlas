@@ -201,7 +201,9 @@ canvas { display: block; cursor: none; }
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  background: none;
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--fg-faint);
   border-radius: 50%;
   color: var(--fg-lo);
@@ -307,6 +309,13 @@ canvas { display: block; cursor: none; }
   color: var(--fg-faint);
   pointer-events: none;
   z-index: 10;
+}
+
+/* ── TIMELINE TRACK (wrapper scroll mobile) ── */
+#timeline-track {
+  position: absolute;
+  inset: 0;
+  width: 100%;
 }
 
 /* ── TIMELINE ── */
@@ -579,6 +588,7 @@ canvas { display: block; cursor: none; }
   white-space: nowrap;
   transform: translateX(-50%);
   color: var(--fg-mid);
+  opacity: 0;
   transition: opacity 0.4s;
 }
 
@@ -862,7 +872,56 @@ a.ip-artiste { cursor: pointer; }
 
 /* Mobile */
 @media (max-width: 768px) {
+  #cursor { display: none; }
+  #mode-tab { display: none; }
+  #hint { display: none; }
+  #nav-dots { display: none; }
+
+  #ls { justify-content: flex-end; gap: 16px; padding-bottom: 80px; }
+
+  #ls-lines {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  #ls-intro-name { display: none; }
+
+  #title {
+    font-size: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+  }
+
+  #timeline {
+    left: 0;
+    right: 0;
+  }
+
+  #timeline-track {
+    overflow: hidden;
+    width: 1000px !important;
+    transition: transform 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  #timeline-marker {
+    left: 50% !important;
+    transform: translateX(-50%);
+    transition: background 0.5s ease, opacity 0.4s ease;
+  }
+
+  .tl-nav-btn {
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    bottom: auto;
+  }
+  #tl-nav-prev { left: 16px; }
+  #tl-nav-next { right: 16px; }
+
   #tl-tooltip {
     bottom: 130px;
+    width: calc(100vw - 16px);
+    left: 8px;
   }
 }

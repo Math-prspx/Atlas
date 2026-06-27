@@ -55,9 +55,11 @@
   <div id="nav-dots"></div>
   <div id="labels"></div>
   <div id="timeline">
-    <div id="timeline-years"></div>
-    <div id="timeline-line"></div>
-    <div id="timeline-dots"></div>
+    <div id="timeline-track">
+      <div id="timeline-years"></div>
+      <div id="timeline-line"></div>
+      <div id="timeline-dots"></div>
+    </div>
     <div id="timeline-marker"><span id="timeline-marker-year"></span><span id="timeline-marker-nom"></span><div id="tl-tab"><span id="tl-tab-year"></span><span class="tl-tab-sep"> · </span><span id="tl-tab-nom"></span><span id="tl-tab-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="7" height="4" viewBox="0 0 9 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,5 4.5,1 8,5"/></svg></span></div></div>
   </div>
 
@@ -183,10 +185,47 @@
     const btn = document.getElementById('ls-enter');
     btn.classList.add('visible');
     btn.addEventListener('click', () => {
-      introNodeLerp = true;
       lsEl.classList.add('exiting');
       setTimeout(() => { lsEl.style.display = 'none'; }, 500);
-      // camTransition déclenché depuis animate() une fois les nœuds en constellation
+      if (isMobile()) {
+        // Mobile : skip constellation, aller directement en timeline
+        enterTimelineMode(); // calcule tlNodeTargets
+        // Snap nœuds immédiatement (pas de lerp — navigation débloquée de suite)
+        nodeMeshes.forEach((m, idx) => {
+          const target = tlNodeTargets[m.userData.id];
+          if (target) m.position.copy(target);
+          if (ringMeshes[idx]) ringMeshes[idx].position.copy(m.position);
+        });
+        tlTransitioning = false;
+        createTimelineEdges();
+        _sceneRevealed = true;
+        // navigateTo gère tout : caméra, tl-tab pill, timeline track centré, marqueur
+        const _firstSlug = tlNodeOrder[0];
+        const _firstC    = courants.find(x => x.id === _firstSlug);
+        const _firstMesh = nodeMap[_firstSlug];
+        // Centrer le track instantanément (sans transition) pour éviter le flash à gauche
+        const _initYear = tlDotMap[_firstSlug]?.year;
+        if (_initYear) {
+          const _track = document.getElementById('timeline-track');
+          if (_track) {
+            _track.style.transition = 'none';
+            updateTimelineTrack(_initYear);
+            _track.offsetHeight; // force reflow
+            _track.style.transition = '';
+          }
+        }
+        if (_firstC && _firstMesh) navigateTo(_firstC, _firstMesh);
+        // Titre + timeline bar
+        setTimeout(() => {
+          document.getElementById('title').style.transition = 'opacity 1.2s ease';
+          document.getElementById('timeline').style.transition = 'opacity 1.2s ease 0.3s';
+          document.getElementById('title').style.opacity = '1';
+          document.getElementById('timeline').style.opacity = '1';
+        }, 400);
+      } else {
+        introNodeLerp = true;
+        // camTransition déclenché depuis animate() une fois les nœuds en constellation
+      }
     }, { once: true });
   }
 
@@ -205,6 +244,7 @@
   // ─── THREE.JS INIT — scène active pendant le loading, nœuds apparaissent au fur et à mesure ───
   const _isDark = localStorage.getItem('atlas-theme') === 'dark';
   if (_isDark) document.documentElement.dataset.theme = 'dark'; // CSS dark vars actifs dès le loading screen
+  const isMobile = () => window.innerWidth <= 768;
   const CAM_START      = new THREE.Vector3(0, 35, 18);  // vue haute inclinée, up standard
   const CAM_END        = new THREE.Vector3(6.75, 5.25, 24.75);
   const CAM_LOOK_START = new THREE.Vector3(0, 0, -4.5);
@@ -254,6 +294,14 @@
     { dx: -0.9,  dy:  1.3,  dz: -1.6,  ry:  12, w: 220, h: 145, type: 'image' },
     { dx:  4.6,  dy: -0.6,  dz: -0.5,  ry: -24, w: 210, h: 290, type: 'image' },
     { dx: -2.7,  dy: -0.9,  dz:  0.35, ry:  -8, w: 235, h: 165, type: 'image' },
+  ];
+  const MOBILE_CARD_OFFSETS = [
+    { dx:  0.0,  dy: -2.5, dz: 0, ry:  0, w: 180, h: 115, type: 'image' },
+    { dx: -1.0,  dy: -1.2, dz: 0, ry:  8, w: 140, h: 195, type: 'image' },
+    { dx:  1.0,  dy: -3.0, dz: 0, ry: -8, w: 185, h: 115, type: 'image' },
+    { dx: -0.5,  dy:  0.0, dz: 0, ry:  5, w: 160, h: 105, type: 'image' },
+    { dx:  0.5,  dy:  1.2, dz: 0, ry: -5, w: 155, h: 215, type: 'image' },
+    { dx: -0.8,  dy:  2.4, dz: 0, ry:  4, w: 170, h: 120, type: 'image' },
   ];
   let floatingCards = [];
   let cardHitPlanes = [];
@@ -449,6 +497,12 @@
 
   // Cascade visuelle (ordre chronologique, stagger 70ms min)
   async function _runIntroCascade() {
+    if (isMobile()) {
+      // Mobile : pas de cascade, tous les nœuds apparaissent d'un coup
+      chronoOrder.forEach(c => { nodeMap[c.id].material.opacity = 1; });
+      setProgress(65);
+      return;
+    }
     for (let i = 0; i < chronoOrder.length; i++) {
       const c = chronoOrder[i];
       showIntroName(c.nom);
@@ -584,13 +638,14 @@
 
   function spawnFloatingCards(c) {
     clearFloatingCards();
-    const pos  = (timelineMode && nodeMap[c.id]) ? nodeMap[c.id].position : c.position;
+    const pos     = (timelineMode && nodeMap[c.id]) ? nodeMap[c.id].position : c.position;
+    const offsets = isMobile() ? MOBILE_CARD_OFFSETS : CARD_OFFSETS;
     const imgs = c.images || [];
     // Orientation de la carte info vers la caméra (yaw uniquement)
     const toCam = camera.position.clone().sub(pos).normalize();
     const camRy = Math.atan2(toCam.x, toCam.z);
 
-    CARD_OFFSETS.forEach((off, i) => {
+    offsets.forEach((off, i) => {
       const el = document.createElement('div');
       el.className = 'float-card';
       el.style.width  = off.w + 'px';
@@ -793,6 +848,14 @@
 
   const bgTypoSpan = document.querySelector('#bg-typo span');
 
+  function updateTimelineTrack(year) {
+    if (!isMobile()) return;
+    const track = document.getElementById('timeline-track');
+    if (!track) return;
+    const dotPx = tlPct(year) / 100 * 1000;
+    track.style.transform = `translateX(${window.innerWidth / 2 - dotPx}px)`;
+  }
+
   function navigateTo(c, mesh) {
     if (camTransition || isZooming) return;
 
@@ -829,11 +892,12 @@
         Object.values(tlDotMap).forEach(e => { e.dot.classList.remove('active'); e.dot.style.background = ''; });
         tlEntry.dot.classList.add('active');
         tlEntry.dot.style.background  = c.couleur || '#111';
-        tlMarkerEl.style.left         = tlPct(tlEntry.year) + '%';
+        if (!isMobile()) tlMarkerEl.style.left = tlPct(tlEntry.year) + '%';
         tlMarkerEl.style.background   = c.couleur || 'rgba(0,0,0,0.35)';
         tlMarkerEl.style.opacity      = '1';
         tlYearLbl.textContent         = tlEntry.year;
         tlYearLbl.style.color         = c.couleur || 'rgba(0,0,0,0.45)';
+        updateTimelineTrack(tlEntry.year);
       }
       openInfoPanel(c.id, c);
       tlUpdateNavButtons();
@@ -860,13 +924,14 @@
       });
       tlEntry.dot.classList.add('active');
       tlEntry.dot.style.background   = c.couleur || '#111';
-      tlMarkerEl.style.left          = tlPct(tlEntry.year) + '%';
+      if (!isMobile()) tlMarkerEl.style.left = tlPct(tlEntry.year) + '%';
       tlMarkerEl.style.background    = c.couleur || 'rgba(0,0,0,0.35)';
       tlMarkerEl.style.opacity       = '1';
       tlYearLbl.textContent          = tlEntry.year;
       tlYearLbl.style.color          = c.couleur || 'rgba(0,0,0,0.45)';
       tlNomLbl.textContent           = c.nom;
       tlNomLbl.style.color           = c.couleur || 'rgba(0,0,0,0.35)';
+      updateTimelineTrack(tlEntry.year);
     }
 
     // Désactiver le noeud précédent
@@ -1531,6 +1596,7 @@
         pMat.opacity = 0.8;
         scene.fog = new THREE.FogExp2(_isDark ? 0x000000 : 0xffffff, 0.0093);
         controls.enabled = true; controls.autoRotate = !_reducedMotion; controls.update();
+        if (isMobile()) setTimeout(() => { if (!timelineMode && !tlTransitioning) enterTimelineMode(); }, 600);
       }
     } else {
       // Smooth orbit target (constellation ET timeline)
