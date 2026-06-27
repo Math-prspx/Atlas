@@ -17,12 +17,36 @@
       <p class="ls-line" id="ls-line-2">37 movements. 150 years of visual history.</p>
       <p class="ls-line" id="ls-line-3">Atlas of Graphic Design.</p>
     </div>
+    <div id="ls-intro-name"></div>
     <div id="ls-pct-wrap"><span id="ls-pct">0</span><span id="ls-pct-sym">%</span></div>
     <button id="ls-enter">Enter</button>
   </div>
 
-  <button id="btn-mute" title="Son ambiant">♫</button>
-  <button id="btn-theme" title="Thème">&#9680;</button>
+  <button id="btn-mute" title="Ambient sound">♫</button>
+  <button id="btn-theme" title="Theme">&#9680;</button>
+
+  <div id="mode-tab">
+    <button class="tab-btn active" id="tab-constellation">
+      <svg width="13" height="10" viewBox="0 0 13 10" fill="none" stroke="currentColor" stroke-width="0.9">
+        <line x1="2" y1="8" x2="6.5" y2="2" opacity="0.6"/>
+        <line x1="6.5" y1="2" x2="11" y2="7" opacity="0.6"/>
+        <line x1="2" y1="8" x2="11" y2="7" opacity="0.3"/>
+        <circle cx="2" cy="8" r="1.4" fill="currentColor" stroke="none"/>
+        <circle cx="6.5" cy="2" r="1.4" fill="currentColor" stroke="none"/>
+        <circle cx="11" cy="7" r="1.4" fill="currentColor" stroke="none"/>
+      </svg>
+      Constellation
+    </button>
+    <button class="tab-btn" id="tab-timeline">
+      <svg width="14" height="10" viewBox="0 0 16 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <line x1="1" y1="5" x2="15" y2="5"/>
+        <circle cx="4" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="8" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+      </svg>
+      Timeline
+    </button>
+  </div>
   <div id="cursor"></div>
   <div id="hover-tip"></div>
   <div id="bg-typo"><span></span></div>
@@ -43,6 +67,9 @@
       <div id="tl-tooltip-scroll"></div>
     </div>
   </div>
+
+  <button id="tl-nav-prev" class="tl-nav-btn">&#8592;</button>
+  <button id="tl-nav-next" class="tl-nav-btn">&#8594;</button>
 
   <div id="lightbox">
     <button id="lb-close">&times;</button>
@@ -143,26 +170,23 @@
   const lsEl    = document.getElementById('ls');
   const lsPctEl = document.getElementById('ls-pct');
   let   lsProgress  = 0;
-  let   _lsSeqDone  = false;
   let   _lsLoadDone = false;
   let   _lsEnterCb  = null;
 
-  // ── Séquence narrative — durée minimum 6s ──────────────────────
+  // Séquence narrative (animation texte uniquement, ne bloque plus le bouton Enter)
   setTimeout(() => document.getElementById('ls-line-1').classList.add('visible'), 300);
   setTimeout(() => document.getElementById('ls-line-2').classList.add('visible'), 1800);
   setTimeout(() => document.getElementById('ls-line-3').classList.add('visible'), 3000);
-  setTimeout(() => { _lsSeqDone = true; _tryShowEnter(); }, 4000);
 
   function _tryShowEnter() {
-    if (!_lsSeqDone || !_lsLoadDone) return;
+    if (!_lsLoadDone) return;
     const btn = document.getElementById('ls-enter');
     btn.classList.add('visible');
     btn.addEventListener('click', () => {
+      introNodeLerp = true;
       lsEl.classList.add('exiting');
-      setTimeout(() => {
-        lsEl.style.display = 'none';
-        if (_lsEnterCb) _lsEnterCb();
-      }, 700);
+      setTimeout(() => { lsEl.style.display = 'none'; }, 500);
+      // camTransition déclenché depuis animate() une fois les nœuds en constellation
     }, { once: true });
   }
 
@@ -180,6 +204,7 @@
 
   // ─── THREE.JS INIT — scène active pendant le loading, nœuds apparaissent au fur et à mesure ───
   const _isDark = localStorage.getItem('atlas-theme') === 'dark';
+  if (_isDark) document.documentElement.dataset.theme = 'dark'; // CSS dark vars actifs dès le loading screen
   const CAM_START      = new THREE.Vector3(0, 35, 18);  // vue haute inclinée, up standard
   const CAM_END        = new THREE.Vector3(6.75, 5.25, 24.75);
   const CAM_LOOK_START = new THREE.Vector3(0, 0, -4.5);
@@ -258,6 +283,19 @@
   let courants = [], edges = []; // peuplé après API fetch
   let navDotsEl = null;          // peuplé après API fetch
 
+  // ── TIMELINE MODE — variables module (déclarées avant animate()) ──
+  let timelineMode    = false;
+  let tlTransitioning = false;
+  let tlNodeOrder     = [];
+  let tlNodeTargets   = {};
+  let tlEdgeMeshes    = [];
+  let tlCurrentIndex  = 0;
+  let introNodeLerp   = null;  // null=inactif, true=actif
+  let pendingReopen   = null;  // {c, mesh} — nœud à rouvrir après transition
+  let _sceneRevealed  = false; // true dès que camTransition démarre (tubes + labels)
+  let _paused         = false; // true quand onglet en arrière-plan
+  const _reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   document.getElementById('title').style.opacity    = '0';
   document.getElementById('hint').style.opacity     = '0';
   document.getElementById('timeline').style.opacity = '0';
@@ -323,13 +361,26 @@
     edges = FALLBACK_EDGES.map(([from, to]) => ({ from, to }));
   }
 
+  // Ordre chronologique — partagé intro + timeline mode
+  const chronoOrder = courants.slice().sort((a, b) => {
+    const ya = a.periode ? parseInt(a.periode.match(/(\d{4})/)?.[1]) || 9999 : 9999;
+    const yb = b.periode ? parseInt(b.periode.match(/(\d{4})/)?.[1]) || 9999 : 9999;
+    return ya - yb;
+  });
+  tlNodeOrder = chronoOrder.map(c => c.id);
+  const _lineIndexMap = {};
+  chronoOrder.forEach((c, i) => { _lineIndexMap[c.id] = i; });
+  const LINE_SPACING = 0.5;
+  const _lineStartX  = -((chronoOrder.length - 1) * LINE_SPACING) / 2;
+
   // ─── NŒUDS, ARÊTES, PARTICULES — créés dès que courants est disponible ───────────────
   courants.forEach(c => {
     const isN2 = c.niveau === 2;
     const geo  = isN2 ? nodeGeoN2 : nodeGeoN1;
     const mat  = new THREE.MeshBasicMaterial({ color: isN2 ? COLOR_N2.clone() : COLOR_DEFAULT.clone(), transparent: true, opacity: 0 });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(c.position);
+    const _lineX = _lineStartX + (_lineIndexMap[c.id] ?? 0) * LINE_SPACING;
+    mesh.position.set(_lineX, 0, 0); // position ligne intro — lerp vers c.position au Enter
     mesh.scale.setScalar(1);
     mesh.userData = c;
     scene.add(mesh);
@@ -340,7 +391,7 @@
     const ringGeo = new THREE.RingGeometry(rInner, rOuter, 40);
     const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x111111), transparent: true, opacity: 0, side: THREE.DoubleSide });
     const ring    = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.copy(c.position);
+    ring.position.set(_lineX, 0, 0);
     scene.add(ring);
     ringMeshes.push(ring);
   });
@@ -348,13 +399,16 @@
     const a = nodeMap[e.from], b = nodeMap[e.to];
     if (!a || !b) return;
     const isSubEdge = a.userData.niveau === 2 || b.userData.niveau === 2;
-    const mid = a.position.clone().lerp(b.position, 0.5)
+    const posA = a.userData.position; // position constellation (pas position courante)
+    const posB = b.userData.position;
+    const mid = posA.clone().lerp(posB, 0.5)
       .add(new THREE.Vector3((Math.random()-0.5)*1.8,(Math.random()-0.5)*1.2,0));
-    const curve   = new THREE.QuadraticBezierCurve3(a.position, mid, b.position);
+    const curve   = new THREE.QuadraticBezierCurve3(posA, mid, posB);
     const tubeGeo = new THREE.TubeGeometry(curve, 24, isSubEdge ? 0.006 : 0.012, 6, false);
-    const tubeMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0 });
+    const tubeMat = new THREE.MeshBasicMaterial({ color: _isDark ? 0x1a1a1a : 0x555555, transparent: true, opacity: 0 });
     const edgeMesh = new THREE.Mesh(tubeGeo, tubeMat);
-    edgeMesh.userData.targetOpacity = isSubEdge ? 0.25 : 0.5;
+    edgeMesh.userData.targetOpacity     = isSubEdge ? 0.25 : 0.5;
+    edgeMesh.userData.baseTargetOpacity = isSubEdge ? 0.25 : 0.5;
     edgeMesh.userData.fromId = e.from;
     edgeMesh.userData.toId   = e.to;
     scene.add(edgeMesh);
@@ -372,23 +426,41 @@
     scene.add(new THREE.Points(pGeo, pMat));
   }
 
-  // ─── PRELOAD IMAGES — allume les nœuds en 3D au fur et à mesure ────────────────
-  const imgTotal = courants.length || 1;
+  // ─── CASCADE INTRO + PRELOAD IMAGES ──────────────────────────────────────────
+  const _introNameEl = document.getElementById('ls-intro-name');
+  function showIntroName(nom) {
+    if (!_introNameEl) return;
+    _introNameEl.textContent = nom;
+    _introNameEl.style.opacity = '1';
+    clearTimeout(_introNameEl._t);
+    _introNameEl._t = setTimeout(() => { _introNameEl.style.opacity = '0'; }, 55);
+  }
+
+  // Images en parallèle (réseau) — juste pour déclencher la progression
   let imgDone = 0;
-  await Promise.all(courants.map(c => new Promise(resolve => {
+  const imgTotal = courants.length || 1;
+  const _imgLoadPromises = courants.map(c => new Promise(resolve => {
     const url = (c.images || [])[0] || null;
-    const done = () => {
-      imgDone++;
-      setProgress(20 + (imgDone / imgTotal) * 45, c.nom.toUpperCase());
-      // couleur_accent non appliquée ici — noeuds restent COLOR_DEFAULT (noir) au repos
-      nodeMap[c.id].material.opacity = 1;
-      resolve();
-    };
-    if (!url) { done(); return; }
+    if (!url) { imgDone++; resolve(); return; }
     const img = new Image();
-    img.onload = img.onerror = done;
+    img.onload = img.onerror = () => { imgDone++; resolve(); };
     img.src = url;
-  })));
+  }));
+
+  // Cascade visuelle (ordre chronologique, stagger 70ms min)
+  async function _runIntroCascade() {
+    for (let i = 0; i < chronoOrder.length; i++) {
+      const c = chronoOrder[i];
+      showIntroName(c.nom);
+      nodeMap[c.id].material.opacity = 1;
+      setProgress(20 + Math.round((i / chronoOrder.length) * 45));
+      await new Promise(r => setTimeout(r, 70));
+    }
+    if (_introNameEl) _introNameEl.style.opacity = '0';
+  }
+
+  // Les deux en parallèle — on attend que les DEUX soient terminés
+  await Promise.all([_runIntroCascade(), Promise.all(_imgLoadPromises)]);
 
   // Preload fichiers audio (ArrayBuffer) — progression 65→100%
   // Stockés dans eraAudioCache pour lecture instantanée au premier clic
@@ -428,7 +500,7 @@
 
   function updateLabels() {
     labelEls.forEach(({ el, c }) => {
-      const pos = c.position.clone().project(camera);
+      const pos = (nodeMap[c.id] ? nodeMap[c.id].position : c.position).clone().project(camera);
       if (pos.z > 1) { el.style.opacity = 0; return; }
       const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
       const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
@@ -512,7 +584,7 @@
 
   function spawnFloatingCards(c) {
     clearFloatingCards();
-    const pos  = c.position;
+    const pos  = (timelineMode && nodeMap[c.id]) ? nodeMap[c.id].position : c.position;
     const imgs = c.images || [];
     // Orientation de la carte info vers la caméra (yaw uniquement)
     const toCam = camera.position.clone().sub(pos).normalize();
@@ -723,8 +795,56 @@
 
   function navigateTo(c, mesh) {
     if (camTransition || isZooming) return;
-    lerpTarget.copy(c.position);
 
+    // ── TIMELINE MODE — navigation sans zoom ───────────────────────
+    if (timelineMode) {
+      const idx = tlNodeOrder.indexOf(c.id);
+      if (idx >= 0) tlCurrentIndex = idx;
+      const target = tlNodeTargets[c.id];
+      if (target) {
+        lerpCameraPos.set(0, 2, target.z + 7);
+        lerpTarget.copy(target);
+      }
+      if (activeNodeMesh && activeNodeMesh !== mesh) {
+        activeNodeMesh.material.color.set(activeNodeMesh.userData.niveau === 2 ? COLOR_N2 : COLOR_DEFAULT);
+        const prevRing = ringMeshes[nodeMeshes.indexOf(activeNodeMesh)];
+        if (prevRing) prevRing.material.opacity = 0;
+      }
+      activeNodeMesh = mesh;
+      mesh.material.color.set(c.couleur || COLOR_ACTIVE);
+      const activeRing = ringMeshes[nodeMeshes.indexOf(mesh)];
+      if (activeRing) { activeRing.material.color.set(c.couleur || COLOR_ACTIVE); activeRing.material.opacity = 0.2; }
+      isZooming = true;
+      controls.enabled = false;
+      clearFloatingCards();
+      pendingCardCourant = c;
+      // Typo monumentale
+      bgTypoSpan.style.fontFamily = c.typographie || 'inherit';
+      bgTypoSpan.style.color      = c.couleur || '#111';
+      bgTypoSpan.textContent      = c.nom;
+      bgTypoSpan.style.opacity    = document.documentElement.dataset.theme === 'dark' ? '0.03' : '0.07';
+      // Timeline bar — marqueur + dot actif
+      const tlEntry = tlDotMap[c.id];
+      if (tlEntry) {
+        Object.values(tlDotMap).forEach(e => { e.dot.classList.remove('active'); e.dot.style.background = ''; });
+        tlEntry.dot.classList.add('active');
+        tlEntry.dot.style.background  = c.couleur || '#111';
+        tlMarkerEl.style.left         = tlPct(tlEntry.year) + '%';
+        tlMarkerEl.style.background   = c.couleur || 'rgba(0,0,0,0.35)';
+        tlMarkerEl.style.opacity      = '1';
+        tlYearLbl.textContent         = tlEntry.year;
+        tlYearLbl.style.color         = c.couleur || 'rgba(0,0,0,0.45)';
+      }
+      openInfoPanel(c.id, c);
+      tlUpdateNavButtons();
+      if (audioStarted && !audioMuted) {
+        const debutYear = c.periode ? parseInt(c.periode.match(/(\d{4})/)?.[1]) : null;
+        if (debutYear) playEraAudio(getEraFile(debutYear));
+      }
+      return;
+    }
+
+    lerpTarget.copy(c.position);
     // Typo monumentale
     bgTypoSpan.style.fontFamily = c.typographie || 'inherit';
     bgTypoSpan.style.color      = c.couleur || '#111';
@@ -853,13 +973,14 @@
     if (e.buttons > 0) {
       const dx = e.clientX - pointerDownX;
       const dy = e.clientY - pointerDownY;
-      if (Math.sqrt(dx * dx + dy * dy) > 5) pointerMoved = true;
+      const _mvThresh = window.innerWidth <= 768 ? 15 : 5;
+      if (Math.sqrt(dx * dx + dy * dy) > _mvThresh) pointerMoved = true;
     }
   });
 
   window.addEventListener('click', e => {
     // Ignorer les clics sur les éléments UI (boutons, timeline, nav-dots)
-    if (e.target.closest('#btn-mute, #btn-theme, #timeline, #nav-dots, #lightbox, #ls, #tl-tooltip')) return;
+    if (e.target.closest('#btn-mute, #btn-theme, #btn-timeline, #timeline, #nav-dots, #lightbox, #ls, #tl-tooltip, .tl-nav-btn')) return;
     if (pointerMoved) return;
     if (camTransition || isZooming) return;
     mouse.x = (e.clientX / window.innerWidth)  * 2 - 1;
@@ -883,6 +1004,36 @@
       deselect();
     }
   });
+
+  // Touch tap — sélection de nœuds sur mobile (bypass click/pointerMoved)
+  let _touchStart = null;
+  renderer.domElement.addEventListener('touchstart', e => {
+    if (e.touches.length === 1)
+      _touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    else
+      _touchStart = null;
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchend', e => {
+    if (!_touchStart || e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - _touchStart.x;
+    const dy = t.clientY - _touchStart.y;
+    const dt = Date.now() - _touchStart.t;
+    _touchStart = null;
+    if (Math.sqrt(dx*dx + dy*dy) > 12 || dt > 400) return; // pas un tap
+    if (camTransition || isZooming) return;
+    mouse.x =  (t.clientX / window.innerWidth)  * 2 - 1;
+    mouse.y = -(t.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(nodeMeshes);
+    if (hits.length > 0) {
+      const mesh = hits[0].object;
+      const c = mesh.userData;
+      if (c && c.nom) navigateTo(c, mesh);
+    } else {
+      deselect();
+    }
+  }, { passive: true });
 
   function deselect() {
     clearFloatingCards(true);
@@ -916,22 +1067,186 @@
     lerpCameraPos.set(6.75, 5.25, 24.75);
     isZooming = true;
     controls.enabled = false;
-    controls.autoRotate = true;
+    controls.autoRotate = !_reducedMotion;
     addStopAutoRotate();
     bgTypoSpan.style.opacity = '0';
     tlMarkerEl.style.opacity = '0';
     Object.values(tlDotMap).forEach(e => { e.dot.classList.remove('active'); e.dot.style.background = ''; });
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // TIMELINE MODE — fonctions
+  // ─────────────────────────────────────────────────────────────────
+
+  function tlUpdateNavButtons() {
+    const prevBtn = document.getElementById('tl-nav-prev');
+    const nextBtn = document.getElementById('tl-nav-next');
+    if (prevBtn) prevBtn.disabled = tlCurrentIndex === 0;
+    if (nextBtn) nextBtn.disabled = tlCurrentIndex === tlNodeOrder.length - 1;
+  }
+
+  function tlNavigate(dir) {
+    if (!timelineMode || tlTransitioning) return;
+    const newIdx = tlCurrentIndex + dir;
+    if (newIdx < 0 || newIdx >= tlNodeOrder.length) return;
+    tlCurrentIndex = newIdx;
+    const slug = tlNodeOrder[tlCurrentIndex];
+    const c    = courants.find(x => x.id === slug);
+    const mesh = nodeMap[slug];
+    if (c && mesh) navigateTo(c, mesh);
+  }
+
+  function createTimelineEdges() {
+    tlEdgeMeshes.forEach(m => scene.remove(m));
+    tlEdgeMeshes = [];
+    const isDarkNow = document.documentElement.dataset.theme === 'dark';
+    const tubeColor = isDarkNow ? 0x1a1a1a : 0x555555;
+    edges.forEach(e => {
+      const posA = tlNodeTargets[e.from] || nodeMap[e.from]?.position;
+      const posB = tlNodeTargets[e.to]   || nodeMap[e.to]?.position;
+      if (!posA || !posB) return;
+      const isSubEdge = nodeMap[e.from]?.userData.niveau === 2 || nodeMap[e.to]?.userData.niveau === 2;
+      const mid    = posA.clone().lerp(posB, 0.5).add(new THREE.Vector3(0, (Math.random() - 0.5) * 1.2, 0));
+      const curve  = new THREE.QuadraticBezierCurve3(posA.clone(), mid, posB.clone());
+      const geo    = new THREE.TubeGeometry(curve, 24, isSubEdge ? 0.006 : 0.012, 6, false);
+      const mat    = new THREE.MeshBasicMaterial({ color: tubeColor, transparent: true, opacity: 0 });
+      const mesh   = new THREE.Mesh(geo, mat);
+      mesh.userData.targetOpacity = isSubEdge ? 0.25 : 0.5;
+      mesh.userData.fromId        = e.from;
+      mesh.userData.toId          = e.to;
+      scene.add(mesh);
+      tlEdgeMeshes.push(mesh);
+    });
+  }
+
+  function enterTimelineMode() {
+    if (timelineMode || tlTransitioning || camTransition || isZooming) return;
+    timelineMode    = true;
+    tlTransitioning = true;
+
+    // Sauvegarder le nœud actif AVANT deselect()
+    const prevActiveId = activeNodeMesh?.userData.id ?? null;
+
+    // Fermer panel et cartes
+    if (activeNodeMesh || currentPanelSlug) deselect();
+
+    // Fade out edges constellation
+    edgeMeshes.forEach(m => { m.userData.targetOpacity = 0; });
+
+    // tlNodeOrder déjà calculé au chargement
+
+    // Positions Z (1880→z=0, 2020→z=-28) + spread X/Y déterministe par slug
+    tlNodeTargets = {};
+    tlNodeOrder.forEach(slug => {
+      const c    = courants.find(x => x.id === slug);
+      const year = c?.periode ? (parseInt(c.periode.match(/(\d{4})/)?.[1]) || 1880) : 1880;
+      const z    = -((year - 1880) / 140) * 28;
+      // Hash déterministe sur le slug → spread stable à chaque toggle
+      let h = 0;
+      for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) & 0xffffffff;
+      const isN2   = c?.niveau === 2;
+      const xRange = isN2 ? 2.2 : 1.0;
+      const yRange = isN2 ? 3.5 : 2.4;
+      const x = ((h & 0xff) / 255 - 0.5) * 2 * xRange;
+      const y = (((h >> 8) & 0xff) / 255 - 0.5) * 2 * yRange;
+      tlNodeTargets[slug] = new THREE.Vector3(x, y, z);
+    });
+
+    // Caméra : nœud précédemment actif si possible, sinon premier nœud
+    const startSlug = (prevActiveId && tlNodeTargets[prevActiveId]) ? prevActiveId : tlNodeOrder[0];
+    const startIdx  = tlNodeOrder.indexOf(startSlug);
+    tlCurrentIndex  = startIdx >= 0 ? startIdx : 0;
+    const firstTarget = tlNodeTargets[tlNodeOrder[tlCurrentIndex]];
+    if (firstTarget) {
+      lerpCameraPos.set(0, 2, firstTarget.z + 7);
+      lerpTarget.copy(firstTarget);
+    }
+
+    if (prevActiveId && tlNodeTargets[prevActiveId] && nodeMap[prevActiveId]) {
+      pendingReopen = { c: courants.find(x => x.id === prevActiveId), mesh: nodeMap[prevActiveId] };
+    }
+
+    // UI
+    navDotsEl.style.display = 'none';
+    document.getElementById('hint').textContent = '\u2190 \u2192 to navigate  \u00b7  Click to explore';
+    document.getElementById('tl-nav-prev').classList.add('visible');
+    document.getElementById('tl-nav-next').classList.add('visible');
+    tlUpdateNavButtons();
+    updateModeTab('timeline');
+  }
+
+  function exitTimelineMode() {
+    if (!timelineMode || tlTransitioning) return;
+
+    // Sauvegarder le nœud actif AVANT deselect()
+    const prevActiveId = activeNodeMesh?.userData.id ?? null;
+
+    // Fermer panel
+    if (activeNodeMesh || currentPanelSlug) deselect();
+
+    // Fade out tlEdgeMeshes — animate loop lerp vers 0, suppression après 800ms
+    tlEdgeMeshes.forEach(m => { m.userData.targetOpacity = 0; });
+    setTimeout(() => {
+      tlEdgeMeshes.forEach(m => scene.remove(m));
+      tlEdgeMeshes = [];
+    }, 800);
+    // Ne pas vider tlEdgeMeshes ici — le loop animate en a besoin pour le fade
+
+    timelineMode    = false;
+    tlTransitioning = true;
+
+    // targetOpacity restauré dans animate() une fois les nœuds en place (même logique qu'à l'entrée)
+
+    if (prevActiveId && nodeMap[prevActiveId]) {
+      pendingReopen = { c: courants.find(x => x.id === prevActiveId), mesh: nodeMap[prevActiveId] };
+    }
+
+    // Caméra : retour vers le nœud précédent en constellation, sinon vue défaut
+    if (prevActiveId && nodeMap[prevActiveId]) {
+      const prevPos = nodeMap[prevActiveId].userData.position;
+      lerpTarget.copy(prevPos);
+      lerpCameraPos.set(prevPos.x + 1.1, prevPos.y + 2.2, prevPos.z + 4.95);
+      controls.target.copy(prevPos);
+    } else {
+      lerpCameraPos.set(6.75, 5.25, 24.75);
+      lerpTarget.set(0, 0, -9.75);
+      controls.target.set(0, 0, -9.75);
+    }
+    isZooming = true;
+    controls.enabled = false;
+
+    // UI
+    navDotsEl.style.display = '';
+    document.getElementById('hint').textContent = 'Drag to orbit \u00a0\u00b7\u00a0 Scroll to zoom \u00a0\u00b7\u00a0 Click to explore';
+    document.getElementById('tl-nav-prev').classList.remove('visible');
+    document.getElementById('tl-nav-next').classList.remove('visible');
+    updateModeTab('constellation');
+  }
+
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (lightboxEl.classList.contains('active')) { closeLightbox(); return; }
       if (tooltipEl.classList.contains('open')) { tooltipEl.classList.remove('open'); return; }
+      if (timelineMode && !activeNodeMesh) { exitTimelineMode(); return; }
       deselect();
     }
     if (lightboxEl.classList.contains('active')) {
-      if (e.key === 'ArrowLeft')  { lbPrev.click(); }
-      if (e.key === 'ArrowRight') { lbNext.click(); }
+      if (e.key === 'ArrowLeft')  { lbPrev.click(); return; }
+      if (e.key === 'ArrowRight') { lbNext.click(); return; }
+    }
+    if (timelineMode) {
+      if (e.key === 'ArrowLeft')  tlNavigate(-1);
+      if (e.key === 'ArrowRight') tlNavigate(1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const dir     = e.key === 'ArrowLeft' ? -1 : 1;
+      const currIdx = tlNodeOrder.indexOf(activeNodeMesh?.userData.id ?? '');
+      const newIdx  = currIdx >= 0
+        ? Math.max(0, Math.min(tlNodeOrder.length - 1, currIdx + dir))
+        : (dir > 0 ? 0 : tlNodeOrder.length - 1);
+      const slug = tlNodeOrder[newIdx];
+      const c    = courants.find(x => x.id === slug);
+      const mesh = nodeMap[slug];
+      if (c && mesh) navigateTo(c, mesh);
     }
   });
 
@@ -1010,6 +1325,10 @@
       m.material.color.set(t.tube);
       m.material.opacity = m.userData.targetOpacity * tubeOpacityScale;
     });
+    tlEdgeMeshes.forEach(m => {
+      m.material.color.set(t.tube);
+      m.material.opacity = m.userData.targetOpacity * tubeOpacityScale;
+    });
     pMat.color.set(t.part);
     btnTheme.textContent = isDark ? '○' : '◐';
     localStorage.setItem('atlas-theme', isDark ? 'dark' : 'light');
@@ -1019,6 +1338,15 @@
   btnTheme.addEventListener('click', () => {
     setTheme(document.documentElement.dataset.theme !== 'dark');
   });
+
+  function updateModeTab(mode) {
+    document.getElementById('tab-constellation')?.classList.toggle('active', mode === 'constellation');
+    document.getElementById('tab-timeline')?.classList.toggle('active', mode === 'timeline');
+  }
+  document.getElementById('tab-constellation').addEventListener('click', () => { if (timelineMode) exitTimelineMode(); });
+  document.getElementById('tab-timeline').addEventListener('click', () => { if (!timelineMode) enterTimelineMode(); });
+  document.getElementById('tl-nav-prev').addEventListener('click', () => tlNavigate(-1));
+  document.getElementById('tl-nav-next').addEventListener('click', () => tlNavigate(1));
 
   // Init depuis localStorage
   if (localStorage.getItem('atlas-theme') === 'dark') setTheme(true);
@@ -1056,6 +1384,19 @@
   document.addEventListener('pointerdown', () => {
     if (!audioStarted) startAudio();
   }, { once: true });
+
+  // Pause audio + rendu quand onglet passe en arrière-plan
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      _paused = true;
+      if (eraGainNode && audioCtx)
+        eraGainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+    } else {
+      _paused = false;
+      if (eraGainNode && audioCtx && !audioMuted && currentEraFile)
+        eraGainNode.gain.linearRampToValueAtTime(0.65, audioCtx.currentTime + 0.5);
+    }
+  });
 
   // ─────────────────────────────────────────────────────────────────
   // ERA AUDIO — crossfade par tranche temporelle
@@ -1138,6 +1479,7 @@
 
   function animate() {
     requestAnimationFrame(animate);
+    if (_paused) return;
     _frame++;
     const t = clock.getElapsedTime();
 
@@ -1155,11 +1497,16 @@
           spawnFloatingCards(pendingCardCourant);
           pendingCardCourant = null;
         }
+        if (pendingReopen) {
+          const pr = pendingReopen; pendingReopen = null;
+          navigateTo(pr.c, pr.mesh);
+        }
       }
     }
 
     // Transition caméra post-loading
     if (camTransition) {
+      if (!_sceneRevealed) _sceneRevealed = true;
       const elapsed  = t - camTransitionStart;
       const progress = Math.min(1, elapsed / CAM_TRANS_DUR);
       const eased    = 1 - Math.pow(1 - progress, 3);
@@ -1167,7 +1514,8 @@
       const lookNow = new THREE.Vector3().lerpVectors(CAM_LOOK_START, controls.target, eased);
       camera.lookAt(lookNow);
       const edgeP = Math.min(1, Math.max(0, (progress - 0.1) / 0.7));
-      edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity * edgeP; });
+      const _edgeDarkScale = _isDark ? 0.45 : 1;
+      edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity * _edgeDarkScale * edgeP; });
       pMat.opacity = 0.8 * Math.min(1, Math.max(0, (progress - 0.2) / 0.6));
       // Bokeh : focus suit la distance + aperture monte progressivement
       const _focusDist = camera.position.distanceTo(CAM_LOOK_START);
@@ -1179,20 +1527,62 @@
           if (m !== activeNodeMesh) m.material.color.set(m.userData.niveau === 2 ? COLOR_N2 : COLOR_DEFAULT);
           m.material.opacity = 1;
         });
-        edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity; });
+        edgeMeshes.forEach(m => { m.material.opacity = m.userData.targetOpacity * (_isDark ? 0.45 : 1); });
         pMat.opacity = 0.8;
         scene.fog = new THREE.FogExp2(_isDark ? 0x000000 : 0xffffff, 0.0093);
-        controls.enabled = true; controls.autoRotate = true; controls.update();
+        controls.enabled = true; controls.autoRotate = !_reducedMotion; controls.update();
       }
     } else {
-      // Smooth orbit target
+      // Smooth orbit target (constellation ET timeline)
       controls.target.lerp(lerpTarget, 0.05);
       controls.update();
     }
     ringMeshes.forEach(r => r.lookAt(camera.position));
 
-    // Hover + pulse + scale
-    nodeMeshes.forEach((m, i) => {
+    // Intro — nœuds filent de la ligne vers les positions constellation
+    if (introNodeLerp) {
+      let allArrived = true;
+      nodeMeshes.forEach((m, idx) => {
+        m.position.lerp(m.userData.position, 0.027);
+        if (ringMeshes[idx]) ringMeshes[idx].position.copy(m.position);
+        if (m.position.distanceTo(m.userData.position) > 0.1) allArrived = false;
+      });
+      if (allArrived) {
+        introNodeLerp = false;
+        _sceneRevealed = true; // labels + edges apparaissent
+        // Petit délai de contemplation, puis la caméra plonge
+        setTimeout(() => { if (_lsEnterCb) { _lsEnterCb(); _lsEnterCb = null; } }, 700);
+      }
+    }
+
+    // Transitions timeline — lerp nœuds constellation ↔ timeline
+    if (tlTransitioning) {
+      let allArrived = true;
+      nodeMeshes.forEach((m, idx) => {
+        const target = timelineMode
+          ? (tlNodeTargets[m.userData.id] || m.userData.position)
+          : m.userData.position;
+        m.position.lerp(target, 0.055);
+        if (ringMeshes[idx]) ringMeshes[idx].position.copy(m.position);
+        if (m.position.distanceTo(target) > 0.15) allArrived = false;
+      });
+      if (allArrived) {
+        tlTransitioning = false;
+        if (timelineMode) {
+          createTimelineEdges();
+          if (pendingReopen) {
+            const pr = pendingReopen; pendingReopen = null;
+            navigateTo(pr.c, pr.mesh);
+          }
+        } else {
+          // Retour constellation : edges réapparaîssent maintenant que les nœuds sont en place
+          edgeMeshes.forEach(m => { m.userData.targetOpacity = m.userData.baseTargetOpacity || 0.5; });
+        }
+      }
+    }
+
+    // Hover + pulse + scale (skip pendant intro)
+    if (!introNodeLerp) nodeMeshes.forEach((m, i) => {
       if (m === activeNodeMesh) {
         // Noeud actif : pulse
         const s = 1 + 0.1 * Math.sin(t * 2 + i * 0.9);
@@ -1210,13 +1600,20 @@
         }
       }
     });
-    // Edge highlight au hover
-    if (!camTransition) {
-      edgeMeshes.forEach(m => {
-        const hovId = hoveredNodeMesh ? hoveredNodeMesh.userData.id : null;
+    // Edge hover + opacity (constellation ET timeline — cachés pendant intro)
+    if (!camTransition && _sceneRevealed) {
+      const hovId       = hoveredNodeMesh ? hoveredNodeMesh.userData.id : null;
+      const activeEdges = timelineMode ? tlEdgeMeshes : edgeMeshes;
+      const inactEdges  = timelineMode ? edgeMeshes   : tlEdgeMeshes;
+      const darkScale   = document.documentElement.dataset.theme === 'dark' ? 0.45 : 1;
+      activeEdges.forEach(m => {
         const isConnected = hovId && (m.userData.fromId === hovId || m.userData.toId === hovId);
-        const targetOp = isConnected ? Math.min(1, m.userData.targetOpacity * 3) : m.userData.targetOpacity;
+        const base = m.userData.targetOpacity * darkScale;
+        const targetOp = isConnected ? Math.min(1, m.userData.targetOpacity * 3) : base;
         m.material.opacity += (targetOp - m.material.opacity) * 0.15;
+      });
+      inactEdges.forEach(m => {
+        m.material.opacity += (0 - m.material.opacity) * 0.1;
       });
     }
 
@@ -1231,7 +1628,7 @@
       if (ref) { plane.position.x = ref.position.x; plane.position.y = ref.position.y; }
     });
 
-    if (_frame % 2 === 0) updateLabels();
+    if (_frame % 2 === 0 && _sceneRevealed) updateLabels();
     if (_frame % 6 === 0) updateNavDots();
     composer.render();
     cssRenderer.render(cssScene, camera);
@@ -1248,6 +1645,7 @@
       hintEl.style.transition     = 'opacity 1.2s ease 0.3s';
       timelineEl.style.transition = 'opacity 1.2s ease 0.5s';
       titleEl.style.opacity = '1'; hintEl.style.opacity = '1'; timelineEl.style.opacity = '1';
+    document.getElementById('mode-tab').classList.add('visible');
     }, 500);
   });
 

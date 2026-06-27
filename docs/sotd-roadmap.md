@@ -28,7 +28,17 @@ Ces points ont causé des bugs majeurs par le passé. Les relire avant toute mod
 ## ✅ DÉCISIONS PRÉALABLES — Validées 2026-06-26
 
 - [x] **Langue** — **Anglais** (portée Awwwards maximale + LinkedIn global)
-- [x] **Mobile strategy** — **Responsive complet** (Phase 4, après Phases 1-2-3 finalisées sur desktop)
+- [x] **Mobile strategy** — **Timeline 3D uniquement sur mobile** (pas de constellation) — décision révisée 2026-06-27
+
+---
+
+## Robustesse & accessibilité ✅ IMPLÉMENTÉ 2026-06-27
+
+- [x] **pixelRatio** — `Math.min(devicePixelRatio, 1.5)` — déjà en place
+- [x] **visibilitychange** — `_paused` stoppe animate loop + fade audio à 0 ; reprise au retour
+- [x] **prefers-reduced-motion** — `_reducedMotion` flag, `controls.autoRotate = !_reducedMotion`
+- [x] **Touch raycaster** — listener `touchend` dédié (seuil 12px / 400ms), bypass `pointerMoved`
+- [x] **Seuil tap mobile** — `pointermove` threshold 5px desktop → 15px mobile
 
 ---
 
@@ -37,100 +47,55 @@ Ces points ont causé des bugs majeurs par le passé. Les relire avant toute mod
 > Le jury Awwwards passe ~2 min sur un site. Les 15 premières secondes décident tout.
 > Objectif : que l'utilisateur comprenne *immédiatement* ce que c'est et veuille explorer.
 
-### 1A — Refonte complète du loading screen ✏️ Spécifications validées
+### 1A — Refonte loading screen ✅ IMPLÉMENTÉ + REFONDU 2026-06-27
 
-**Concept général :** l'écran de chargement devient une séquence narrative cinématique. L'utilisateur lit, anticipe, puis choisit d'entrer. Il agit — il ne subit plus.
-
-**Fond :** blanc pur (thème principal du site = light). Pas de scène 3D derrière.
-
-**Contenu — hiérarchie verticale centrée :**
-```
-[ligne 1]  Design doesn't happen in a vacuum.
-[ligne 2]  37 movements. 150 years of visual history.
-[ligne 3]  Atlas of Graphic Design.
-
-           [  %  ]       ← chiffre centré, taille modérée (pas gigantesque)
-
-           [ Enter ]     ← apparaît quand loading + séquence sont terminés
-```
-
-**Rythme et timing :**
-- Ligne 1 apparaît à t = 0s (fade in)
-- Ligne 2 apparaît à t = 2s
-- Ligne 3 apparaît à t = 4s
-- Durée minimum garantie : **6s** — même si le chargement est instantané
-- Si chargement fini avant 6s → on attend la fin de la séquence, puis Enter apparaît
-- Si chargement fini après 6s → Enter apparaît dès que le chargement est prêt
-- Le `%` monte en parallèle, indépendamment du rythme narratif
-
-**Bouton Enter :**
-- Apparaît en fade in une fois les deux conditions remplies (séquence + chargement)
-- Au clic : les lignes et le `%` s'effacent (fade out), la scène 3D se révèle
-- ✅ **Transition Enter** — plongeon caméra séquencé : l'intro fade out, puis `camTransition = true` déclenche le lerp existant `(0,35,18) → (6.75,5.25,24.75)` en 2s. Réutilise le code existant, zéro rewrite.
-
-**Hint :**
-- Remplacer `"Drag pour orbiter · Scroll pour zoomer · Clic pour explorer"` par :
-  *"Drag to orbit · Scroll to zoom · Click to explore"*
-- Ou supprimer entièrement (à décider en Phase 2 selon le visual finish)
+- Cascade de 37 nœuds en ligne horizontale (ordre chronologique 1880→2020) pendant le loading
+- Chaque nœud apparaît à 70ms d'intervalle + flash du nom du courant en overlay
+- Texte narratif 3 lignes (Syne) conservé, s'anime en parallèle
+- Bouton Enter dès que loading complet (pas de délai forcé)
+- **Au clic** : LS fade out 0.5s → nœuds filent vers positions constellation (lerp 0.027, ~4s)
+- Une fois en place : labels + tubes apparaissent, 700ms de contemplation → caméra plonge
+- Flag `_sceneRevealed` : tubes et labels cachés jusqu'à ce que les nœuds soient en position
+- Dark theme : `data-theme` défini dès le départ, bouton Enter adapté au thème, tubes à la bonne couleur
 
 ---
 
 ### 1B — Autres items onboarding
 
-- [ ] **Axe temporel — Mode "Timeline" à bascule** ✅ Option B retenue
-  - Deux modes : **Constellation** (positions manuelles actuelles, effet orbital) + **Timeline** (nœuds réarrangés sur X = temps, animation lerp)
-  - Constellation → Timeline : chaque nœud lerpe vers sa position calculée (`X = (periode_debut - 1880) / 140 * spread`), edges mis à jour, labels CSS3D suivent
-  - Toggle : bouton discret dans l'UI (position à définir)
-  - ⚠️ À décider avant implémentation :
-    - Y en mode Timeline : tous à Y=0 (ligne plate) ou spread vertical léger anti-overlap ?
-    - La caméra se repositionne-t-elle automatiquement pour avoir la meilleure vue de la ligne ?
-    - Position du toggle dans l'UI ?
-  - *(Chantier lourd — à faire après Phase 1A et les autres items 1B)*
+- [ ] **Axe temporel — Mode "Timeline" à bascule** ✅ IMPLÉMENTÉ 2026-06-27
+  - Bouton icône (ligne + 3 dots) à côté de ♫ et ◐ — toggle ON/OFF
+  - 37 nœuds lerp vers axe Z trié par date (1880 devant, 2020 au fond, 28 unités)
+  - Spread X/Y déterministe par slug (hash) — N1 yRange ±2.4 / N2 yRange ±3.5
+  - Tubes redessinés avec la couleur du thème actif, même opacité que constellation
+  - Navigation ←→ clavier + 2 boutons flèches → `navigateTo()` complet (zoom, cards, panel, audio, timeline bar)
+  - **Navigation ←→ aussi en constellation** — même logique, `tlNodeOrder` partagé
+  - `pendingReopen` : nœud actif rouverte automatiquement dans les deux sens (enter ET exit)
+  - Caméra mémorisée à l'aller ET au retour (nœud actif conservé entre les deux modes)
+  - Tubes constellation réapparaissent APRÈS les nœuds (symétrique avec le mode timeline)
+  - OrbitControls actif en permanence, coupé uniquement pendant `isZooming`
+  - Escape hiérarchique : panel → exit timeline
 - [ ] **Légende des connexions** — ✅ La DB a déjà tout : table `courant_relations` avec `source_id → cible_id` (direction) + `type_relation` ENUM (`influence`, `opposition`, `derivation`, `contemporain`). L'API retourne déjà le `type` par relation. **Le JS l'ignore actuellement.** À exploiter :
   - Visuel par type : `influence` = trait plein, `opposition` = pointillé, `derivation` = tirets, `contemporain` = opacity faible
   - Direction : flèche ou dégradé sur le tube (source → cible)
   - Légende discrète dans l'UI expliquant les 4 types
   - *(Chantier Phase 2 — visual finish des edges)*
-- [ ] **Hover micro-info** — Au survol d'un nœud :
-  - Le nœud scale up légèrement (×1.3) + émission lumineuse douce
-  - Ses edges connectés s'illuminent avec leur couleur de type
-  - Tooltip léger sous le curseur : nom + date + type de relations connectées
-  - *(Données disponibles sans back-end supplémentaire)*
+- [x] **Hover micro-info** ✅ IMPLÉMENTÉ — Au survol d'un nœud :
+  - Scale up 1.0→1.4 (lerp 0.14/frame), couleur accent révélée
+  - Edges connectés : opacity ×3 (lerp 0.15/frame)
+  - `#hover-tip` : nom + date sous le curseur (Inter, 9px, 0.25em spacing)
+  - `hoveredNodeMesh` + `edgeMesh.userData.fromId/toId` ajoutés
 - [x] **Hint contextuel post-entrée** — ✅ Décision : **rien**. L'intro narrative + le hover réactif (nœud scale up, curseur coloré) + les labels billboard suffisent. Sur-expliquer = infantiliser un public design-savvy.
 
 ---
 
-## Phase 2 — Visual Finish ★★★★☆
+## Phase 2 — Visual Finish ★★★★☆ ✅ COMPLÈTE 2026-06-27
 
-> Les SOTD ont une cohérence visuelle absolue et du micro-détail partout.
-
-- [ ] **Typographie** ✅ Décision arrêtée :
-  - **Titres / UI principale** : `Syne` (Google Fonts) — identité visuelle forte, monde art/design, gratuite
-  - **Corps de texte / panels** : `Inter` (Google Fonts) — ultra-lisible, écran-first, meilleur rendu que Roboto sur haute résolution
-  - Actuellement : Helvetica Neue système partout → à remplacer
-  - Usage : Syne sur `#title`, intro narrative, labels 3D, timeline — Inter sur panels info, tooltips, descriptions
-  - Le `bg-typo` peut aussi passer en Syne avec letter-spacing extrême pour renforcer la signature
-- [ ] **Palette de couleurs** ✅ Direction arrêtée — **couleur comme récompense d'interaction** :
-  - Au repos : constellation monochrome (nœuds noir/gris foncé en dark, blanc/gris clair en light) — minimal, high-tech
-  - Hover : le nœud révèle sa `couleur_accent` (scale up + couleur)
-  - Sélectionné : couleur pleine + ring
-  - Panel info : `couleur_accent` utilisée pour titres, séparateurs, accents UI
-  - ⚠️ Travail éditorial : attribuer une `couleur_accent` distinctive aux 37 courants dans admin.php (certains évidents : Bauhaus = rouge/noir, De Stijl = primaires, Memphis = multicolore). À faire en Phase 3.
-- [ ] **Curseur personnalisé** ✅ Direction : purement visuel (forme + couleur), pas de texte intégré — double emploi avec les labels billboard.
-  - Amélioration : ajouter `transition: width 150ms, height 150ms, background 150ms, border-color 150ms` — le curseur "fond" vers la couleur accent au survol au lieu de switcher instantanément
-  - Cohérent avec le système couleur : révèle la `couleur_accent` avant même le nœud
-- [ ] **Transitions de panel** ✅ Direction arrêtée :
-  - Entrée : `scale(0.88) + translateY(12px) → scale(1) + translateY(0)`, durée `480ms`, easing `cubic-bezier(0.16, 1, 0.3, 1)` (ease-out expo)
-  - Stagger conservé entre cartes (54ms) — à affiner à l'usage
-  - Fermeture : fade-out avant suppression du DOM (actuellement instantané) — ajouter `visible` class removal + setTimeout 300ms avant `cssScene.remove()`
-  - À affiner visuellement une fois implémenté
-- [ ] **Loading screen** — ✅ Entièrement redéfini par Phase 1A (Syne + Inter, fond blanc, séquence narrative, bouton Enter, plongeon caméra). Pas de décisions supplémentaires ici — implémentation couplée à 1A.
-- [ ] **Hover states sur tous les éléments UI** — Base existante correcte (transitions opacity/background 0.3s). À améliorer :
-  - Boutons `#btn-mute`, `#btn-theme` : ajouter `transform: scale(1.1)` au hover (statiques actuellement)
-  - Nav dots + tl-dots : déjà transitionné, à vérifier cohérence avec nouvelle palette
-  - Tous les éléments cliquables : s'assurer que `cursor: pointer` + retour visuel sont présents partout
-  - À affiner visuellement pendant l'implémentation — pas de décision bloquante
-- [x] **Edges animés** — ✅ Décision : **pas d'animation au repos** (particules = kitsch + lourd, pulse = overhead constant). Les edges restent statiques mais bien traités (épaisseur + couleur par type de relation). L'animation se limite au hover : les edges du nœud survolé s'illuminent (opacity boost instantané). Zéro overhead en idle.
+- [x] Typographie Syne+Inter ✅
+- [x] Palette + curseur + transitions panel ✅
+- [x] Hover boutons ✅
+- [x] **Mode tab centré** — pill `⊹ Constellation / ⇌ Timeline`, actif = fond `var(--fg)`, fade-in post-orbit (delay 1.8s). `updateModeTab()` synchronise l'état.
+- [x] **◐ thème** top left, **♫ audio** top right — 22px, opacity 0.5
+- Edges animés = décision : non (hover uniquement)
 
 ---
 
@@ -138,24 +103,17 @@ Ces points ont causé des bugs majeurs par le passé. Les relire avant toute mod
 
 > Sortir du contenu Wikipedia brut. Les jurés lisent ce qu'ils trouvent.
 
-- [ ] **Descriptions réécrites** ✅ Direction arrêtée :
-  - **Une seule description** par courant (5-6 phrases), ton hybride : phrase évocatrice d'ouverture + contenu factuel substantiel
-  - Remplace à la fois `description_courte` et `description_longue` actuelles (Wikipedia brut)
-  - En anglais
-  - Généré par Copilot, validé par toi — à faire en une session dédiée sur les 37 courants
-  - Colonne DB à utiliser : `description_longue` (on vide `description_courte` ou on la réutilise pour un résumé 1 phrase)
+- [x] **Descriptions réécrites** ✅ IMPLÉMENTÉ — 37 descriptions EN dans `description_longue` via `scraper/seed_content_en.sql`. Angle graphic design uniquement.
 
-- [ ] **Citations emblématiques** ✅ Direction arrêtée :
-  - 1 citation par courant (designer, théoricien, manifeste)
-  - Affichage dans le panel : bloc mis en valeur — typographie distinctive (Syne italic, taille +), séparateur visuel, fond léger
-  - Nouvelle colonne DB à ajouter : `citation` (TEXT) + `citation_auteur` (VARCHAR)
-  - Généré par Copilot, validé par toi
-- [ ] **Artistes** ✅ Règle éditoriale : **3 noms max** par courant, les plus représentatifs. À vérifier/ajuster dans admin.php lors de la session contenu.
+- [x] **Citations emblématiques** ✅ IMPLÉMENTÉ — Colonnes `citation`+`citation_auteur` ajoutées, API mise à jour, panel affiche le bloc citation (Syne italic + cite Inter). 37 citations seedées.
 
-- [x] **Images** ✅ Déjà fait — 6 images par courant, sélectionnées une à une pour cohérence visuelle et qualité, en prod DB. Rien à faire.
+- [ ] **Artistes** — Script `scraper/trim_artistes.php` prêt (token AtlasRun2024). **Low priority.**
 
-- [ ] **Éliminer les fallback data anglais** — Le `FALLBACK_CONTENT` hardcodé dans index.html (données en anglais) doit être supprimé ou réduit au strict minimum. L'API prod est fiable — le fallback ne doit être qu'un filet de sécurité vide, pas une source de contenu alternatif. À faire lors du chantier Phase 1A (refonte JS).
-- [x] **Langue unifiée** ✅ — Anglais, décision validée en amont.
+- [x] **Images** ✅ Déjà fait.
+
+- [ ] **Couleurs accent** — À attribuer dans admin.php (à faire plus tard par l'utilisateur).
+
+- [x] **Langue unifiée** ✅ Anglais.
 
 ---
 
