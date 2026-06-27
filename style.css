@@ -48,7 +48,7 @@ canvas { display: block; cursor: none; }
 #ls.exiting { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
 
 #ls-intro-name {
-  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-family: 'Space Grotesk', 'Helvetica Neue', sans-serif;
   font-size: clamp(13px, 1.3vw, 22px);
   font-weight: 400;
   letter-spacing: 0.25em;
@@ -70,7 +70,7 @@ canvas { display: block; cursor: none; }
 }
 
 .ls-line {
-  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-family: 'Space Grotesk', 'Helvetica Neue', sans-serif;
   font-size: clamp(16px, 1.6vw, 28px);
   font-weight: 300;
   color: var(--fg);
@@ -88,7 +88,7 @@ canvas { display: block; cursor: none; }
 .ls-line.visible { opacity: 1; transform: translateY(0); }
 
 #ls-pct-wrap {
-  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-family: 'Space Grotesk', 'Helvetica Neue', sans-serif;
   font-size: 1.6rem;
   font-weight: 300;
   color: var(--fg-lo);
@@ -96,7 +96,7 @@ canvas { display: block; cursor: none; }
 }
 
 #ls-enter {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.3em;
@@ -182,7 +182,7 @@ canvas { display: block; cursor: none; }
   border-radius: 22px;
   background: transparent;
   color: var(--fg-mid);
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -269,7 +269,7 @@ canvas { display: block; cursor: none; }
 }
 
 #bg-typo span {
-  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-family: 'Space Grotesk', 'Helvetica Neue', sans-serif;
   font-size: 16vw;
   font-weight: 700;
   text-transform: uppercase;
@@ -288,7 +288,7 @@ canvas { display: block; cursor: none; }
   top: 36px;
   left: 5%;
   transform: translateX(0);
-  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-family: 'Space Grotesk', 'Helvetica Neue', sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -747,7 +747,7 @@ canvas { display: block; cursor: none; }
 }
 
 #ip-nom {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 22px;
   font-weight: 600;
   line-height: 1.1;
@@ -775,7 +775,7 @@ canvas { display: block; cursor: none; }
   margin: 4px 0 20px;
 }
 #ip-citation p {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 11.5px;
   font-style: italic;
   font-weight: 300;

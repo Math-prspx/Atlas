@@ -6,7 +6,7 @@
   <title>Atlas of Graphic Design</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@300;400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lexend:wght@300;400;500&family=Barlow+Condensed:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Bebas+Neue&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -129,6 +129,18 @@
     'brutalisme-web': { artistes: ['Pascal Deville','Hass & Hahn'],                        principes: 'Raw HTML feel, visible structure, system fonts, uncomfortable contrast.' },
   };
 
+  // Typographies bg-typo : 5 catégories → Google Fonts chargées
+  const TYPO_MAP = {
+    'serif':      "'Playfair Display', serif",
+    'sans-serif': "'Lexend', sans-serif",
+    'condensed':  "'Barlow Condensed', sans-serif",
+    'old':        "'Cormorant Garamond', serif",
+    'modern':     "'Bebas Neue', sans-serif",
+  };
+  function resolveTypo(typo) {
+    return TYPO_MAP[typo] || typo || "'Space Grotesk', sans-serif";
+  }
+
   // mapApiData : ajouter niveau
   function mapApiData(apiData) {
     const courants = apiData.map(c => {
@@ -143,7 +155,7 @@
         nom:         c.nom,
         periode:     periodeStr,
         couleur:     c.da?.couleur   || '#888888',
-        typographie: c.da?.typo      || '"Helvetica Neue", sans-serif',
+        typographie: resolveTypo(c.da?.typo),
         description: c.description_longue || c.description_courte || fb.description || '',
         mots_cles:   (c.mots_cles?.length ? c.mots_cles : fb.mots_cles) || [],
         artistes:    c.artistes   || [],
@@ -857,7 +869,7 @@
   }
 
   function navigateTo(c, mesh) {
-    if (camTransition || isZooming) return;
+    if (camTransition || (isZooming && !isMobile())) return;
 
     // ── TIMELINE MODE — navigation sans zoom ───────────────────────
     if (timelineMode) {
@@ -1086,7 +1098,7 @@
     const dt = Date.now() - _touchStart.t;
     _touchStart = null;
     if (Math.sqrt(dx*dx + dy*dy) > 12 || dt > 400) return; // pas un tap
-    if (camTransition || isZooming) return;
+    if (camTransition) return; // isZooming autorisé sur mobile (navigateTo gère)
     mouse.x =  (t.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(t.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
@@ -1554,7 +1566,7 @@
     }
     // Zoom vers le noeud actif — cartes spawnées à l'arrivée
     if (isZooming) {
-      camera.position.lerp(lerpCameraPos, 0.05);
+      camera.position.lerp(lerpCameraPos, isMobile() ? 0.1 : 0.05);
       if (camera.position.distanceTo(lerpCameraPos) < 0.25) {
         isZooming = false;
         controls.enabled = true;
